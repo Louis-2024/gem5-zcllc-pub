@@ -1,0 +1,66 @@
+echo /splash-3-rtss-2022/codes/apps/ocean/contiguous_partitions/OCEAN -p2 -n258 
+/splash-3-rtss-2022/codes/apps/ocean/contiguous_partitions/OCEAN -p2 -n258 
+echo /splash-3-rtss-2022/codes/apps/ocean/non_contiguous_partitions/OCEAN -p2 -n258 
+/splash-3-rtss-2022/codes/apps/ocean/non_contiguous_partitions/OCEAN -p2 -n258 
+echo /splash-3-rtss-2022/codes/apps/raytrace/RAYTRACE -p2 -m64 inputs/car.env 
+/splash-3-rtss-2022/codes/apps/raytrace/RAYTRACE -p2 -m64 inputs/car.env 
+echo /splash-3-rtss-2022/codes/apps/volrend/VOLREND 2 inputs/head 8 
+/splash-3-rtss-2022/codes/apps/volrend/VOLREND 2 inputs/head 8 
+echo /splash-3-rtss-2022/codes/apps/water-nsquared/WATER-NSQUARED   < "/splash-3-rtss-2022/codes/apps/water-nsquared/inputs/n512-p2"
+/splash-3-rtss-2022/codes/apps/water-nsquared/WATER-NSQUARED   < "/splash-3-rtss-2022/codes/apps/water-nsquared/inputs/n512-p2"
+echo /splash-3-rtss-2022/codes/apps/water-spatial/WATER-SPATIAL   < "/splash-3-rtss-2022/codes/apps/water-spatial/inputs/n512-p2"
+/splash-3-rtss-2022/codes/apps/water-spatial/WATER-SPATIAL   < "/splash-3-rtss-2022/codes/apps/water-spatial/inputs/n512-p2"
+echo /splash-3-rtss-2022/codes/kernels/cholesky/CHOLESKY -p2  < "/splash-3-rtss-2022/codes/kernels/cholesky/inputs/tk15.O"
+/splash-3-rtss-2022/codes/kernels/cholesky/CHOLESKY -p2  < "/splash-3-rtss-2022/codes/kernels/cholesky/inputs/tk15.O"
+echo /splash-3-rtss-2022/codes/kernels/fft/FFT -p2 -m16 
+/splash-3-rtss-2022/codes/kernels/fft/FFT -p2 -m16 
+echo /splash-3-rtss-2022/codes/kernels/lu/contiguous_blocks/LU -p2 -n512 
+/splash-3-rtss-2022/codes/kernels/lu/contiguous_blocks/LU -p2 -n512 
+echo /splash-3-rtss-2022/codes/kernels/lu/non_contiguous_blocks/LU -p2 -n512 
+/splash-3-rtss-2022/codes/kernels/lu/non_contiguous_blocks/LU -p2 -n512 
+echo /splash-3-rtss-2022/codes/kernels/radix/RADIX -p2 -n1048576 
+/splash-3-rtss-2022/codes/kernels/radix/RADIX -p2 -n1048576 
+echo /splash-3-rtss-2022/codes/apps/ocean/contiguous_partitions/OCEAN -p4 -n258 
+/splash-3-rtss-2022/codes/apps/ocean/contiguous_partitions/OCEAN -p4 -n258 
+echo /splash-3-rtss-2022/codes/apps/ocean/non_contiguous_partitions/OCEAN -p4 -n258 
+/splash-3-rtss-2022/codes/apps/ocean/non_contiguous_partitions/OCEAN -p4 -n258 
+echo /splash-3-rtss-2022/codes/apps/raytrace/RAYTRACE -p4 -m64 inputs/car.env 
+/splash-3-rtss-2022/codes/apps/raytrace/RAYTRACE -p4 -m64 inputs/car.env 
+echo /splash-3-rtss-2022/codes/apps/volrend/VOLREND 4 inputs/head 8 
+/splash-3-rtss-2022/codes/apps/volrend/VOLREND 4 inputs/head 8 
+echo /splash-3-rtss-2022/codes/apps/water-nsquared/WATER-NSQUARED   < "/splash-3-rtss-2022/codes/apps/water-nsquared/inputs/n512-p4"
+/splash-3-rtss-2022/codes/apps/water-nsquared/WATER-NSQUARED   < "/splash-3-rtss-2022/codes/apps/water-nsquared/inputs/n512-p4"
+echo /splash-3-rtss-2022/codes/apps/water-spatial/WATER-SPATIAL   < "/splash-3-rtss-2022/codes/apps/water-spatial/inputs/n512-p4"
+/splash-3-rtss-2022/codes/apps/water-spatial/WATER-SPATIAL   < "/splash-3-rtss-2022/codes/apps/water-spatial/inputs/n512-p4"
+echo /splash-3-rtss-2022/codes/kernels/cholesky/CHOLESKY -p4  < "/splash-3-rtss-2022/codes/kernels/cholesky/inputs/tk15.O"
+/splash-3-rtss-2022/codes/kernels/cholesky/CHOLESKY -p4  < "/splash-3-rtss-2022/codes/kernels/cholesky/inputs/tk15.O"
+echo /splash-3-rtss-2022/codes/kernels/fft/FFT -p4 -m16 
+/splash-3-rtss-2022/codes/kernels/fft/FFT -p4 -m16 
+echo /splash-3-rtss-2022/codes/kernels/lu/contiguous_blocks/LU -p4 -n512 
+/splash-3-rtss-2022/codes/kernels/lu/contiguous_blocks/LU -p4 -n512 
+echo /splash-3-rtss-2022/codes/kernels/lu/non_contiguous_blocks/LU -p4 -n512 
+/splash-3-rtss-2022/codes/kernels/lu/non_contiguous_blocks/LU -p4 -n512 
+echo /splash-3-rtss-2022/codes/kernels/radix/RADIX -p4 -n1048576 
+/splash-3-rtss-2022/codes/kernels/radix/RADIX -p4 -n1048576 
+echo /splash-3-rtss-2022/codes/apps/ocean/contiguous_partitions/OCEAN -p8 -n258 
+/splash-3-rtss-2022/codes/apps/ocean/contiguous_partitions/OCEAN -p8 -n258 
+echo /splash-3-rtss-2022/codes/apps/ocean/non_contiguous_partitions/OCEAN -p8 -n258 
+/splash-3-rtss-2022/codes/apps/ocean/non_contiguous_partitions/OCEAN -p8 -n258 
+echo /splash-3-rtss-2022/codes/apps/raytrace/RAYTRACE -p8 -m64 inputs/car.env 
+/splash-3-rtss-2022/codes/apps/raytrace/RAYTRACE -p8 -m64 inputs/car.env 
+echo /splash-3-rtss-2022/codes/apps/volrend/VOLREND 8 inputs/head 8 
+/splash-3-rtss-2022/codes/apps/volrend/VOLREND 8 inputs/head 8 
+echo /splash-3-rtss-2022/codes/apps/water-nsquared/WATER-NSQUARED   < "/splash-3-rtss-2022/codes/apps/water-nsquared/inputs/n512-p8"
+/splash-3-rtss-2022/codes/apps/water-nsquared/WATER-NSQUARED   < "/splash-3-rtss-2022/codes/apps/water-nsquared/inputs/n512-p8"
+echo /splash-3-rtss-2022/codes/apps/water-spatial/WATER-SPATIAL   < "/splash-3-rtss-2022/codes/apps/water-spatial/inputs/n512-p8"
+/splash-3-rtss-2022/codes/apps/water-spatial/WATER-SPATIAL   < "/splash-3-rtss-2022/codes/apps/water-spatial/inputs/n512-p8"
+echo /splash-3-rtss-2022/codes/kernels/cholesky/CHOLESKY -p8  < "/splash-3-rtss-2022/codes/kernels/cholesky/inputs/tk15.O"
+/splash-3-rtss-2022/codes/kernels/cholesky/CHOLESKY -p8  < "/splash-3-rtss-2022/codes/kernels/cholesky/inputs/tk15.O"
+echo /splash-3-rtss-2022/codes/kernels/fft/FFT -p8 -m16 
+/splash-3-rtss-2022/codes/kernels/fft/FFT -p8 -m16 
+echo /splash-3-rtss-2022/codes/kernels/lu/contiguous_blocks/LU -p8 -n512 
+/splash-3-rtss-2022/codes/kernels/lu/contiguous_blocks/LU -p8 -n512 
+echo /splash-3-rtss-2022/codes/kernels/lu/non_contiguous_blocks/LU -p8 -n512 
+/splash-3-rtss-2022/codes/kernels/lu/non_contiguous_blocks/LU -p8 -n512 
+echo /splash-3-rtss-2022/codes/kernels/radix/RADIX -p8 -n1048576 
+/splash-3-rtss-2022/codes/kernels/radix/RADIX -p8 -n1048576 
