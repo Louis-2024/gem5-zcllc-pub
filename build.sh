@@ -1,3 +1,4 @@
+rm -rf build/X86_LC_MSI
 rm -rf build/.scons_config build/sconsign build/variables/ build/variables.global
  
 scons --config=force -Q \
