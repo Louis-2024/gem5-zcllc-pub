@@ -240,7 +240,7 @@ public:
     }
     
 
-    protected:
+protected:
     bool m_use_vi;
     bool m_ziv;
     // Store all relocated cache line
