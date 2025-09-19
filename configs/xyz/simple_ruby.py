@@ -123,13 +123,12 @@ isa = str(m5.defines.buildEnv['TARGET_ISA']).lower()
 # Run application and use the compiled ISA to find the binary
 # grab the specific path to the binary
 thispath = os.path.dirname(os.path.realpath(__file__))
-# binary = os.path.join(thispath, '../../', 'tests/test-progs/threads/bin/',
-#                      isa, 'linux/threads')
+binary = os.path.join(thispath, '../../', 'tests/test-progs/threads/bin/', isa, 'linux/threads')
 # binary = '/gem5/a.out'
 # binary = os.path.join('/splash-3-rtss-2022/codes/apps/water-nsquared/./WATER-NSQUARED')
 
 if not args.ruby_test:
-    binary = args.program 
+    # binary = args.program 
 
     # Create a process for a simple "multi-threaded" application
     process = Process()
