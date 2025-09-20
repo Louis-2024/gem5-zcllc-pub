@@ -1,2 +1,0 @@
-rm -rf m5out
-PYTHONPATH="$PWD/configs:$PWD/build/X86_LC_MSI/python" ./build/X86_LC_MSI/gem5.opt  --debug-flags=ZIVCache --debug-file=ziv.log --debug-start=0 configs/xyz/simple_ruby.py  --ncore 4 --wc --use-ziv --use-vi --l1-size 4kB --l2-size 16kB --l3-size 128kB --program tests/test-progs/threads/bin/x86/linux/threads --args "10000"
