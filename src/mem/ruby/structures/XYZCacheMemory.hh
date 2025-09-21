@@ -5,7 +5,9 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <map>
+#include <set>
 #include <vector>
+#include <algorithm>
 #include "debug/ZIVCache.hh"
 
 #include "base/statistics.hh"
@@ -220,15 +222,22 @@ public:
         // We now needs to select a cache line from Q
         // TODO: use a more intelligent replacement policy
         assert(Q.size() > 0);
-        Addr victim = *Q.begin();
+
+        // random selection
+        int index = (int) rand() % Q.size();
+        Addr victim = *std::next(Q.begin(), index);
+
         assert(isTagPresent(victim));
         return victim;
     }
     Addr simpleProbe(Addr address) const {
         if(!m_ziv) return cacheProbe(address);
+        assert(Q.size() >= 0);
         
-        // assert(Q.size() >= 0);
-        Addr victim = *Q.begin();
+        // random selection
+        int index = (int) rand() % Q.size();
+        Addr victim = *std::next(Q.begin(), index);
+
         assert(isTagPresent(victim));
         return victim;
     }
@@ -247,7 +256,7 @@ protected:
     std::unordered_map<Addr, Location> relocation_table;
     // Store the number of sharers for cache lines cached
     std::unordered_map<Addr, int> P; // the P set for maintaining P
-    std::unordered_set<Addr> Q; // the lines that are dirty but not privately cached
+    std::set<Addr> Q; // the lines that are dirty but not privately cached
 
     std::vector<int> CRECountPerSet; // The number of CRE per set, initialized to be all zeros
     std::vector<std::vector<bool>> isCRE;
