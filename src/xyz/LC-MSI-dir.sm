@@ -800,6 +800,7 @@ MessageBuffer *responseFromMemory;
 
   action(sendLLCToReq, "creq", desc="Copy data from LLC to resp") {
       assert(is_valid(cache_entry));
+      xyzCacheMemory.recordLLCAccess(address);
       if(splitBus) {
         peek(request_in, RequestMsg) {
             enqueue(response_out_bus, ResponseMsg, responseBusLatency) {

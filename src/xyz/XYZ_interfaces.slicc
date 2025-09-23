@@ -44,6 +44,7 @@ structure (XYZCacheMemory, external = "yes") {
   void clearSharer(Addr);
   void markCRE(Addr);
   bool xyzCREAvail(Addr);
+  void recordLLCAccess(Addr);
   Addr xyzCacheProbe(Addr);
   bool calculateVIwithDelta(int delta_lhs, int delta_rhs, int private_capcacity);
   bool vi_enabled();

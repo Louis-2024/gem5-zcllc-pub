@@ -23,6 +23,7 @@
 // #include "params/RubyCache.hh"
 #include "params/XYZCache.hh"
 #include "sim/sim_object.hh"
+#include "sim/cur_tick.hh"
 
 namespace gem5 {
 
@@ -70,6 +71,7 @@ public:
     virtual void addSharer(Addr address) {
         if(!m_ziv) return;
         assert(isTagPresent(address));
+        LLC_last_access[address] = curTick();
         if(Q.find(address) != Q.end()) {
             Q.erase(address);
             assert(P.find(address) == P.end());
@@ -93,6 +95,7 @@ public:
     virtual void markOwner(Addr address) {
         if(!m_ziv) return;
         assert(isTagPresent(address));
+        LLC_last_access[address] = curTick();
         if(Q.find(address) != Q.end()) {
             Q.erase(address);
             assert(P.find(address) == P.end());
@@ -117,6 +120,7 @@ public:
         it->second--;
         if(it->second == 0) {
             Q.insert(address);
+            // LLC_last_access[address] = curTick();
             P.erase(it);
         }
         totalPrivateCache -= 1;
@@ -131,6 +135,7 @@ public:
         totalPrivateCache -= it->second;
         P.erase(it);
         Q.insert(address);
+        // LLC_last_access[address] = curTick();
         reportInvariant(address);
     }
     // must be called afterwards
@@ -142,6 +147,7 @@ public:
         assert(Q.find(address) != Q.end());
         assert(P.find(address) == P.end());
         Q.erase(address);
+        LLC_last_access.erase(address);
         auto e = lookup(address);
         auto row = e->getSet();
         auto way = e->getWay();
@@ -159,6 +165,15 @@ public:
         if(!m_ziv) return cacheAvail(address);
         return CRETotal > 0;
     }
+
+    // Track the access of LLC cache lines
+    virtual void recordLLCAccess(Addr address) {
+        if(!m_ziv) return;
+        if(Q.find(address) != Q.end() || P.find(address) != P.end()) {
+            LLC_last_access[address] = curTick();
+        }
+    }
+
     bool checkCRE(Addr address) {
         panic_if(!m_ziv, "Relocation when ziv is not used");
         assert(isTagPresent(address));
@@ -220,15 +235,34 @@ public:
         // We now needs to select a cache line from Q
         // TODO: use a more intelligent replacement policy
         assert(Q.size() > 0);
+
         Addr victim = *Q.begin();
+        Tick oldest_time = curTick();
+        for (const Addr& addr : Q) {
+            Tick access_time = LLC_last_access.at(addr);
+            if (access_time < oldest_time) {
+                oldest_time = access_time;
+                victim = addr;
+            }
+        }
+
         assert(isTagPresent(victim));
         return victim;
     }
     Addr simpleProbe(Addr address) const {
         if(!m_ziv) return cacheProbe(address);
+        assert(Q.size() > 0);
         
-        // assert(Q.size() >= 0);
         Addr victim = *Q.begin();
+        Tick oldest_time = curTick();
+        for (const Addr& addr : Q) {
+            Tick access_time = LLC_last_access.at(addr);
+            if (access_time < oldest_time) {
+                oldest_time = access_time;
+                victim = addr;
+            }
+        }
+
         assert(isTagPresent(victim));
         return victim;
     }
@@ -248,6 +282,7 @@ protected:
     // Store the number of sharers for cache lines cached
     std::unordered_map<Addr, int> P; // the P set for maintaining P
     std::unordered_set<Addr> Q; // the lines that are dirty but not privately cached
+    mutable std::unordered_map<Addr, Tick> LLC_last_access;
 
     std::vector<int> CRECountPerSet; // The number of CRE per set, initialized to be all zeros
     std::vector<std::vector<bool>> isCRE;
