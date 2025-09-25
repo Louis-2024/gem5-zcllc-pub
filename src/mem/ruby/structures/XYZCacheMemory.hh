@@ -23,6 +23,7 @@
 // #include "params/RubyCache.hh"
 #include "params/XYZCache.hh"
 #include "sim/sim_object.hh"
+#include "sim/cur_tick.hh"
 
 namespace gem5 {
 
@@ -142,6 +143,7 @@ public:
         assert(Q.find(address) != Q.end());
         assert(P.find(address) == P.end());
         Q.erase(address);
+        cache_last_access.erase(address);
         auto e = lookup(address);
         auto row = e->getSet();
         auto way = e->getWay();
@@ -159,6 +161,21 @@ public:
         if(!m_ziv) return cacheAvail(address);
         return CRETotal > 0;
     }
+
+    virtual void recordCacheAccess(Addr address) {
+        if(!m_ziv) return;
+        if((P.find(address) != P.end()) || (Q.find(address) != Q.end())) {
+            cache_last_access[address] = curTick();
+        }
+    }
+
+    virtual void addCacheAccess(Addr address) {
+        if(!m_ziv) return;
+        if((P.find(address) == P.end()) && (Q.find(address) == Q.end())) {
+            cache_last_access[address] = curTick();
+        }
+    }
+
     bool checkCRE(Addr address) {
         panic_if(!m_ziv, "Relocation when ziv is not used");
         assert(isTagPresent(address));
@@ -220,15 +237,91 @@ public:
         // We now needs to select a cache line from Q
         // TODO: use a more intelligent replacement policy
         assert(Q.size() > 0);
-        Addr victim = *Q.begin();
+        
+        Q_last_access.clear();
+        for (const Addr& addr : Q) {
+            assert(cache_last_access.find(addr) != cache_last_access.end());
+            Q_last_access[addr] = cache_last_access[addr];
+        }
+
+        Addr victim = 0;
+        Tick lru_access_time = curTick();
+
+        for (const auto& pair : Q_last_access) {
+            Addr addr = pair.first;
+            Tick access_time = pair.second;
+            if (access_time < lru_access_time) {
+                lru_access_time = access_time;
+                victim = addr;
+            }
+        }
+
+        
+
+        // Tick mru_access_time = 0;
+        // for (const auto& pair : Q_last_access) {
+        //     Addr addr = pair.first;
+        //     Tick access_time = pair.second;
+        //     if (access_time > mru_access_time) {
+        //         mru_access_time = access_time;
+        //     }
+        // }
+        // int content_conformity = 1;
+        // for (const Addr& addr : Q) {
+        //     if (Q_last_access.find(addr) == Q_last_access.end()) {
+        //         content_conformity = 0;
+        //     }
+        // }
+        // DPRINTF(ZIVCache, "Q_last_access.size() = %d, Q.size() = %d, P.size() = %d, cache_last_access.size() = %d \n", Q_last_access.size(), Q.size(), P.size(), cache_last_access.size());
+        // DPRINTF(ZIVCache, "content conformity = %d, lru access: %llu, mru access: %llu\n", content_conformity, lru_access_time, mru_access_time);
+        // DPRINTF(ZIVCache, "xyzCacheProbe's victim: %#x, lru access: %llu, current time: %llu\n", victim, lru_access_time, curTick());
+
         assert(isTagPresent(victim));
         return victim;
     }
     Addr simpleProbe(Addr address) const {
         if(!m_ziv) return cacheProbe(address);
         
-        // assert(Q.size() >= 0);
-        Addr victim = *Q.begin();
+        assert(Q.size() >= 0);
+        
+        Q_last_access.clear();
+        for (const Addr& addr : Q) {
+            assert(cache_last_access.find(addr) != cache_last_access.end());
+            Q_last_access[addr] = cache_last_access[addr];
+        }
+
+        Addr victim = 0;
+        Tick lru_access_time = curTick();
+        
+        for (const auto& pair : Q_last_access) {
+            Addr addr = pair.first;
+            Tick access_time = pair.second;
+            if (access_time < lru_access_time) {
+                lru_access_time = access_time;
+                victim = addr;
+            }
+        }
+
+
+
+        // Tick mru_access_time = 0;
+        // for (const auto& pair : Q_last_access) {
+        //     Addr addr = pair.first;
+        //     Tick access_time = pair.second;
+        //     if (access_time > mru_access_time) {
+        //         mru_access_time = access_time;
+        //     }
+        // }
+        // int content_conformity = 1;
+        // for (const Addr& addr : Q) {
+        //     if (Q_last_access.find(addr) == Q_last_access.end()) {
+        //         content_conformity = 0;
+        //     }
+        // }
+        // DPRINTF(ZIVCache, "Q_last_access.size() = %d, Q.size() = %d, P.size() = %d, cache_last_access.size() = %d \n", Q_last_access.size(), Q.size(), P.size(), cache_last_access.size());
+        // DPRINTF(ZIVCache, "content conformity = %d, lru access: %llu, mru access: %llu\n", content_conformity, lru_access_time, mru_access_time);
+        // DPRINTF(ZIVCache, "simpleProbe's victim: %#x, lru access: %llu, current time: %llu\n", victim, lru_access_time, curTick());
+
         assert(isTagPresent(victim));
         return victim;
     }
@@ -248,6 +341,8 @@ protected:
     // Store the number of sharers for cache lines cached
     std::unordered_map<Addr, int> P; // the P set for maintaining P
     std::unordered_set<Addr> Q; // the lines that are dirty but not privately cached
+    mutable std::unordered_map<Addr, Tick> cache_last_access;
+    mutable std::unordered_map<Addr, Tick> Q_last_access;
 
     std::vector<int> CRECountPerSet; // The number of CRE per set, initialized to be all zeros
     std::vector<std::vector<bool>> isCRE;

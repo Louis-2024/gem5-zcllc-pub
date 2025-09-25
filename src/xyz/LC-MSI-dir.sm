@@ -340,6 +340,13 @@ MessageBuffer *responseFromMemory;
     xyzStatsObject.recordReplLLC();
   }
 
+  action(recordCacheAccess, 'rLLC', desc="Record Cache Access") {
+    xyzCacheMemory.recordCacheAccess(address);
+  }
+
+  action(addCacheAccess, 'aLLC', desc="Add Cache Access") {
+    xyzCacheMemory.addCacheAccess(address);
+  }
 
   action(allocteROCTBE, 'aTBE', desc="Allocate tbe entry for RoC for current pending request") {
     peek(request_in, RequestMsg) {
@@ -961,7 +968,8 @@ MessageBuffer *responseFromMemory;
   }
   
   transition(LLCOnly, GetS, S) {
-      deallocateROCTBE;
+    recordCacheAccess;
+    deallocateROCTBE;
     addReqToSharers
     xyzAddToSharers;
     sendLLCToReq;
@@ -973,7 +981,8 @@ MessageBuffer *responseFromMemory;
   transition(LLCOnly, GetM, M) {
     guardOnlyInCache;
 
-deallocateROCTBE;
+    recordCacheAccess;
+    deallocateROCTBE;
     setOwner;
     xyzSetOwner;
     sendLLCToReq;
@@ -984,6 +993,7 @@ deallocateROCTBE;
   
   // allocateROCTBE only used when doing replacement and request has to be ordered
   transition(I, GetS, S_m) {
+      addCacheAccess;
       deallocateROCTBE;
       allocateCacheBlock;
       sendMemRead;
@@ -1010,6 +1020,7 @@ deallocateROCTBE;
   }
 
   transition(I, GetM, M_m) {
+      addCacheAccess;
       deallocateROCTBE;
       allocateCacheBlock;
       sendMemRead;
@@ -1030,6 +1041,7 @@ deallocateROCTBE;
   }
 
   transition(S, GetS) {
+      recordCacheAccess;
       // deallocateROCTBE;
       sendLLCToReq;
       addReqToSharers;
@@ -1039,6 +1051,7 @@ deallocateROCTBE;
       markLLCDone_WaitForDataIfNonSplit;
   }
   transition(S, GetM, M) {
+      recordCacheAccess;
       // deallocateROCTBE;
       removeReqFromSharers;
       sendInvToSharers;
@@ -1166,6 +1179,7 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
 
   // as if this is GetM according to PMSI*, so no S_D state needed
   transition(M, GetS) {
+      recordCacheAccess;
       sendFwdGetM;
       clearOwner;
       setOwner;
@@ -1176,6 +1190,7 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
   }
 
   transition(M, GetM) {
+      recordCacheAccess;
       // deallocateROCTBE;
       sendFwdGetM;
       clearOwner;
