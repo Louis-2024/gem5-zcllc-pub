@@ -164,16 +164,7 @@ public:
 
     virtual void recordCacheAccess(Addr address) {
         if(!m_ziv) return;
-        if((P.find(address) != P.end()) || (Q.find(address) != Q.end())) {
-            cache_last_access[address] = curTick();
-        }
-    }
-
-    virtual void addCacheAccess(Addr address) {
-        if(!m_ziv) return;
-        if((P.find(address) == P.end()) && (Q.find(address) == Q.end())) {
-            cache_last_access[address] = curTick();
-        }
+        cache_last_access[address] = curTick();
     }
 
     bool checkCRE(Addr address) {
@@ -240,13 +231,15 @@ public:
         
         Q_last_access.clear();
         for (const Addr& addr : Q) {
-            assert(cache_last_access.find(addr) != cache_last_access.end());
-            Q_last_access[addr] = cache_last_access[addr];
+            if (cache_last_access.find(addr) != cache_last_access.end()) {
+                Q_last_access[addr] = cache_last_access[addr];
+            } else {
+                DPRINTF(ZIVCache, "Warning: No access time found for address %#x in Q\n", addr);
+            }
         }
 
         Addr victim = 0;
         Tick lru_access_time = curTick();
-
         for (const auto& pair : Q_last_access) {
             Addr addr = pair.first;
             Tick access_time = pair.second;
@@ -256,25 +249,11 @@ public:
             }
         }
 
-        
-
-        // Tick mru_access_time = 0;
-        // for (const auto& pair : Q_last_access) {
-        //     Addr addr = pair.first;
-        //     Tick access_time = pair.second;
-        //     if (access_time > mru_access_time) {
-        //         mru_access_time = access_time;
-        //     }
-        // }
-        // int content_conformity = 1;
-        // for (const Addr& addr : Q) {
-        //     if (Q_last_access.find(addr) == Q_last_access.end()) {
-        //         content_conformity = 0;
-        //     }
-        // }
-        // DPRINTF(ZIVCache, "Q_last_access.size() = %d, Q.size() = %d, P.size() = %d, cache_last_access.size() = %d \n", Q_last_access.size(), Q.size(), P.size(), cache_last_access.size());
-        // DPRINTF(ZIVCache, "content conformity = %d, lru access: %llu, mru access: %llu\n", content_conformity, lru_access_time, mru_access_time);
-        // DPRINTF(ZIVCache, "xyzCacheProbe's victim: %#x, lru access: %llu, current time: %llu\n", victim, lru_access_time, curTick());
+        int size_Q_last_access = Q_last_access.size();
+        int size_Q = Q.size();
+        int size_cache_last_access = cache_last_access.size();
+        int size_P = P.size();
+        DPRINTF(ZIVCache, "Q_last_access = %d, Q = %d, P = %d, cache_last_access = %d \n", size_Q_last_access, size_Q, size_P, size_cache_last_access);
 
         assert(isTagPresent(victim));
         return victim;
@@ -286,13 +265,15 @@ public:
         
         Q_last_access.clear();
         for (const Addr& addr : Q) {
-            assert(cache_last_access.find(addr) != cache_last_access.end());
-            Q_last_access[addr] = cache_last_access[addr];
+            if (cache_last_access.find(addr) != cache_last_access.end()) {
+                Q_last_access[addr] = cache_last_access[addr];
+            } else {
+                DPRINTF(ZIVCache, "Warning: No access time found for address %#x in Q\n", addr);
+            }
         }
 
         Addr victim = 0;
         Tick lru_access_time = curTick();
-        
         for (const auto& pair : Q_last_access) {
             Addr addr = pair.first;
             Tick access_time = pair.second;
@@ -302,25 +283,11 @@ public:
             }
         }
 
-
-
-        // Tick mru_access_time = 0;
-        // for (const auto& pair : Q_last_access) {
-        //     Addr addr = pair.first;
-        //     Tick access_time = pair.second;
-        //     if (access_time > mru_access_time) {
-        //         mru_access_time = access_time;
-        //     }
-        // }
-        // int content_conformity = 1;
-        // for (const Addr& addr : Q) {
-        //     if (Q_last_access.find(addr) == Q_last_access.end()) {
-        //         content_conformity = 0;
-        //     }
-        // }
-        // DPRINTF(ZIVCache, "Q_last_access.size() = %d, Q.size() = %d, P.size() = %d, cache_last_access.size() = %d \n", Q_last_access.size(), Q.size(), P.size(), cache_last_access.size());
-        // DPRINTF(ZIVCache, "content conformity = %d, lru access: %llu, mru access: %llu\n", content_conformity, lru_access_time, mru_access_time);
-        // DPRINTF(ZIVCache, "simpleProbe's victim: %#x, lru access: %llu, current time: %llu\n", victim, lru_access_time, curTick());
+        int size_Q_last_access = Q_last_access.size();
+        int size_Q = Q.size();
+        int size_cache_last_access = cache_last_access.size();
+        int size_P = P.size();
+        DPRINTF(ZIVCache, "Q_last_access = %d, Q = %d, P = %d, cache_last_access = %d \n", size_Q_last_access, size_Q, size_P, size_cache_last_access);
 
         assert(isTagPresent(victim));
         return victim;

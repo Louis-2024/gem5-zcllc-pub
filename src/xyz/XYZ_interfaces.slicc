@@ -50,7 +50,6 @@ structure (XYZCacheMemory, external = "yes") {
   bool ziv_enabled();
   Addr simpleProbe(Addr);
   void recordCacheAccess(Addr);
-  void addCacheAccess(Addr);
 
   // hardware transactional memory
   void htmCommitTransaction();

@@ -121,6 +121,7 @@ void XYZCacheMemory::deallocate(Addr address) {
     assert(Q.find(address) == Q.end()); // should be clean and safe to deallocate
     DPRINTF(ZIVCache, "ZIV cache is deallocating %#x with cacheMemory method\n", address);
     CacheMemory::deallocate(address);
+    cache_last_access.erase(address);
     // This must be after deallocate since it uses lookup to find the location
     auto it = relocation_table.find(address);
     if(it != relocation_table.end()) {

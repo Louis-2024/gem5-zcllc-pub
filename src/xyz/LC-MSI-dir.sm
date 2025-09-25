@@ -344,10 +344,6 @@ MessageBuffer *responseFromMemory;
     xyzCacheMemory.recordCacheAccess(address);
   }
 
-  action(addCacheAccess, 'aLLC', desc="Add Cache Access") {
-    xyzCacheMemory.addCacheAccess(address);
-  }
-
   action(allocteROCTBE, 'aTBE', desc="Allocate tbe entry for RoC for current pending request") {
     peek(request_in, RequestMsg) {
         if(enforce_roc) {
@@ -548,17 +544,20 @@ MessageBuffer *responseFromMemory;
 
   action(xyzAddToSharers, 'xyzAS', desc="...") {
     xyzCacheMemory.addSharer(address);
+    xyzCacheMemory.recordCacheAccess(address);
   }
 
   action(xyzRemoveFromSharers, 'xyzRM', desc="...") {
       peek(request_in, RequestMsg) {
           if(cache_entry.Owner.isElement(in_msg.Requestor) || cache_entry.Sharers.isElement(in_msg.Requestor)) {
             xyzCacheMemory.removeSharer(address);
+            xyzCacheMemory.recordCacheAccess(address);
           }
       }
   }
   action(xyzSetOwner, 'xyzSO', desc="...") {
     xyzCacheMemory.markOwner(address);
+    xyzCacheMemory.recordCacheAccess(address);
   }
 
   action(setOwner, "sO", desc="Set the owner") {
@@ -993,7 +992,7 @@ MessageBuffer *responseFromMemory;
   
   // allocateROCTBE only used when doing replacement and request has to be ordered
   transition(I, GetS, S_m) {
-      addCacheAccess;
+      recordCacheAccess;
       deallocateROCTBE;
       allocateCacheBlock;
       sendMemRead;
@@ -1020,7 +1019,7 @@ MessageBuffer *responseFromMemory;
   }
 
   transition(I, GetM, M_m) {
-      addCacheAccess;
+      recordCacheAccess;
       deallocateROCTBE;
       allocateCacheBlock;
       sendMemRead;
@@ -1462,6 +1461,7 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
     guardSplitBus;
     guardInWBTBE;
 
+    recordCacheAccess;
     allocateCacheBlockIfNotPresent;
     migrateWBTBEToCache;
 
@@ -1480,6 +1480,7 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
     guardSplitBus;
     guardInWBTBE;
 
+    recordCacheAccess;
     allocateCacheBlockIfNotPresent;
     migrateWBTBEToCache;
 
@@ -1499,6 +1500,7 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
     guardSplitBus;
     guardInWBTBE;
 
+    recordCacheAccess;
     allocateCacheBlockIfNotPresent;
     migrateWBTBEToCache;
 
@@ -1516,6 +1518,7 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
     guardSplitBus;
     guardInWBTBE;
 
+    recordCacheAccess;
     allocateCacheBlockIfNotPresent;
     migrateWBTBEToCache;
 
