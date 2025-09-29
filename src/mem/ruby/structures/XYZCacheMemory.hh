@@ -6,6 +6,7 @@
 #include <unordered_set>
 #include <map>
 #include <vector>
+#include <fstream>
 #include "debug/ZIVCache.hh"
 
 #include "base/statistics.hh"
@@ -165,6 +166,11 @@ public:
     virtual void recordCacheAccess(Addr address) {
         if(!m_ziv) return;
         cache_last_access[address] = curTick();
+        
+        if (cache_next_access.is_open()) {
+            cache_next_access << std::hex << address << "," << cache_last_access[address] << std::endl;
+            cache_next_access.flush();
+        }
     }
 
     bool checkCRE(Addr address) {
@@ -229,32 +235,9 @@ public:
         // TODO: use a more intelligent replacement policy
         assert(Q.size() > 0);
         
-        Q_last_access.clear();
-        for (const Addr& addr : Q) {
-            if (cache_last_access.find(addr) != cache_last_access.end()) {
-                Q_last_access[addr] = cache_last_access[addr];
-            } else {
-                DPRINTF(ZIVCache, "Warning: No access time found for address %#x in Q\n", addr);
-            }
-        }
-
-        Addr victim = 0;
-        Tick lru_access_time = curTick();
-        for (const auto& pair : Q_last_access) {
-            Addr addr = pair.first;
-            Tick access_time = pair.second;
-            if (access_time < lru_access_time) {
-                lru_access_time = access_time;
-                victim = addr;
-            }
-        }
-
-        int size_Q_last_access = Q_last_access.size();
-        int size_Q = Q.size();
-        int size_cache_last_access = cache_last_access.size();
-        int size_P = P.size();
-        DPRINTF(ZIVCache, "Q_last_access = %d, Q = %d, P = %d, cache_last_access = %d \n", size_Q_last_access, size_Q, size_P, size_cache_last_access);
-
+        // implement belady's algorithm
+        Addr victim = *Q.begin();
+        
         assert(isTagPresent(victim));
         return victim;
     }
@@ -263,32 +246,9 @@ public:
         
         assert(Q.size() >= 0);
         
-        Q_last_access.clear();
-        for (const Addr& addr : Q) {
-            if (cache_last_access.find(addr) != cache_last_access.end()) {
-                Q_last_access[addr] = cache_last_access[addr];
-            } else {
-                DPRINTF(ZIVCache, "Warning: No access time found for address %#x in Q\n", addr);
-            }
-        }
-
-        Addr victim = 0;
-        Tick lru_access_time = curTick();
-        for (const auto& pair : Q_last_access) {
-            Addr addr = pair.first;
-            Tick access_time = pair.second;
-            if (access_time < lru_access_time) {
-                lru_access_time = access_time;
-                victim = addr;
-            }
-        }
-
-        int size_Q_last_access = Q_last_access.size();
-        int size_Q = Q.size();
-        int size_cache_last_access = cache_last_access.size();
-        int size_P = P.size();
-        DPRINTF(ZIVCache, "Q_last_access = %d, Q = %d, P = %d, cache_last_access = %d \n", size_Q_last_access, size_Q, size_P, size_cache_last_access);
-
+        // implement belady's algorithm
+        Addr victim = *Q.begin();
+        
         assert(isTagPresent(victim));
         return victim;
     }
@@ -317,6 +277,8 @@ protected:
     int pri_tot = -1;
 
     int totalPrivateCache = 0;
+
+    static std::ofstream cache_next_access;
 
 private:
     // We don't need to copy this

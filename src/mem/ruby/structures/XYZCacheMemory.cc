@@ -225,5 +225,7 @@ void XYZCacheMemory::relocateVictim(AbstractCacheEntry* entry, Location targetLo
     */
 }
 
+std::ofstream XYZCacheMemory::cache_next_access("cache_next_access.log");
+
 }; // namespace ruby
 }; // namespace gem5

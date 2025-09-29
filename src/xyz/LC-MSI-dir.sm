@@ -551,13 +551,11 @@ MessageBuffer *responseFromMemory;
       peek(request_in, RequestMsg) {
           if(cache_entry.Owner.isElement(in_msg.Requestor) || cache_entry.Sharers.isElement(in_msg.Requestor)) {
             xyzCacheMemory.removeSharer(address);
-            xyzCacheMemory.recordCacheAccess(address);
           }
       }
   }
   action(xyzSetOwner, 'xyzSO', desc="...") {
     xyzCacheMemory.markOwner(address);
-    xyzCacheMemory.recordCacheAccess(address);
   }
 
   action(setOwner, "sO", desc="Set the owner") {
@@ -970,7 +968,6 @@ MessageBuffer *responseFromMemory;
     recordCacheAccess;
     deallocateROCTBE;
     addReqToSharers
-    xyzAddToSharers;
     sendLLCToReq;
     popRequestQueue;
 
