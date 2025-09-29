@@ -544,7 +544,6 @@ MessageBuffer *responseFromMemory;
 
   action(xyzAddToSharers, 'xyzAS', desc="...") {
     xyzCacheMemory.addSharer(address);
-    xyzCacheMemory.recordCacheAccess(address);
   }
 
   action(xyzRemoveFromSharers, 'xyzRM', desc="...") {
@@ -554,6 +553,7 @@ MessageBuffer *responseFromMemory;
           }
       }
   }
+  
   action(xyzSetOwner, 'xyzSO', desc="...") {
     xyzCacheMemory.markOwner(address);
   }
@@ -967,7 +967,8 @@ MessageBuffer *responseFromMemory;
   transition(LLCOnly, GetS, S) {
     recordCacheAccess;
     deallocateROCTBE;
-    addReqToSharers
+    addReqToSharers;
+    xyzAddToSharers;
     sendLLCToReq;
     popRequestQueue;
 
