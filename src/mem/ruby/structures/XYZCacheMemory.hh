@@ -168,7 +168,7 @@ public:
         cache_last_access[address] = curTick();
         
         if (cache_next_access.is_open()) {
-            cache_next_access << std::hex << address << "," << cache_last_access[address] << std::endl;
+            cache_next_access << std::hex << address << "," << std::dec << cache_last_access[address] << std::endl;
             cache_next_access.flush();
         }
     }
