@@ -14,6 +14,7 @@
 #include "mem/cache/replacement_policies/weighted_lru_rp.hh"
 #include "mem/ruby/protocol/AccessPermission.hh"
 #include "mem/ruby/system/RubySystem.hh"
+#include <sstream>
 
 namespace gem5 {
 
@@ -39,6 +40,8 @@ void XYZCacheMemory::init() {
     isCRE.resize(m_cache_num_sets,
                     std::vector<bool>(m_cache_assoc, 1));
     CRETotal = getNumBlocks();
+
+    loadCacheAccessMap("cache_access_map.txt");
 }
 
 
@@ -226,6 +229,61 @@ void XYZCacheMemory::relocateVictim(AbstractCacheEntry* entry, Location targetLo
 }
 
 std::ofstream XYZCacheMemory::cache_next_access("cache_next_access.log");
+
+void XYZCacheMemory::loadCacheAccessMap(const std::string& filename) {
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        DPRINTF(ZIVCache, "Cache access map file %s not found, skipping load\n", filename);
+        return;
+    }
+    
+    std::string line;
+    int line_count = 0;
+    int loaded_entries = 0;
+    
+    while (std::getline(file, line)) {
+        line_count++;
+        
+        std::istringstream iss(line);
+        std::string token;
+        std::vector<std::string> tokens;
+
+        while (std::getline(iss, token, ',')) {
+            token.erase(0, token.find_first_not_of(" \t\r\n"));
+            token.erase(token.find_last_not_of(" \t\r\n") + 1);
+            if (!token.empty()) {
+                tokens.push_back(token);
+            }
+        }
+
+        Addr address = std::stoull(tokens[0], nullptr, 16);
+        std::vector<Tick> access_times;
+        for (size_t i = 1; i < tokens.size(); i++) {
+            Tick access_time = std::stoull(tokens[i]);
+            access_times.push_back(access_time);
+        }
+        
+        cache_access_map[address] = access_times;
+        loaded_entries++;
+    }
+    
+    file.close();
+    DPRINTF(ZIVCache, "Loaded %d entries from cache access map file %s\n", 
+            loaded_entries, filename);
+}
+
+const std::vector<Tick>& XYZCacheMemory::getAccessTimes(Addr address) const {
+    static const std::vector<Tick> empty_vector;
+    auto it = cache_access_map.find(address);
+    if (it != cache_access_map.end()) {
+        return it->second;
+    }
+    return empty_vector;
+}
+
+bool XYZCacheMemory::hasAccessTimes(Addr address) const {
+    return cache_access_map.find(address) != cache_access_map.end();
+}
 
 }; // namespace ruby
 }; // namespace gem5

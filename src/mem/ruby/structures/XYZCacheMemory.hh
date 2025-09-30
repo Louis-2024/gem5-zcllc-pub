@@ -175,6 +175,15 @@ public:
         }
     }
 
+    // Load cache access map from file
+    void loadCacheAccessMap(const std::string& filename);
+
+    // Get access times for a given address
+    const std::vector<Tick>& getAccessTimes(Addr address) const;
+
+    // Check if address exists in access map
+    bool hasAccessTimes(Addr address) const;
+
     bool checkCRE(Addr address) {
         panic_if(!m_ziv, "Relocation when ziv is not used");
         assert(isTagPresent(address));
@@ -238,8 +247,32 @@ public:
         assert(Q.size() > 0);
 
         // implement belady's algorithm
-        int index = (int) rand() % Q.size();
-        Addr victim = *std::next(Q.begin(), index);
+        Tick currentTime = curTick();
+        Tick maxNextAccessTime = 0;
+        Addr victim = *Q.begin();
+
+        for (Addr entry : Q) {
+            if (!hasAccessTimes(entry)) {
+                return entry;
+            }
+            const std::vector<Tick>& access_times = getAccessTimes(entry);
+            Tick nextAccessTime = 0;
+            bool foundNextAccess = false;
+            for (Tick access_time : access_times) {
+                if (access_time > currentTime) {
+                    nextAccessTime = access_time;
+                    foundNextAccess = true;
+                    break;
+                }
+            }
+            if (!foundNextAccess) {
+                return entry;
+            }
+            if (nextAccessTime > maxNextAccessTime) {
+                maxNextAccessTime = nextAccessTime;
+                victim = entry;
+            }
+        }
 
         assert(isTagPresent(victim));
         return victim;
@@ -247,11 +280,35 @@ public:
     Addr simpleProbe(Addr address) const {
         if(!m_ziv) return cacheProbe(address);
 
-        assert(Q.size() >= 0);
+        assert(Q.size() > 0);
 
         // implement belady's algorithm
-        int index = (int) rand() % Q.size();
-        Addr victim = *std::next(Q.begin(), index);
+        Tick currentTime = curTick();
+        Tick maxNextAccessTime = 0;
+        Addr victim = *Q.begin();
+
+        for (Addr entry : Q) {
+            if (!hasAccessTimes(entry)) {
+                return entry;
+            }
+            const std::vector<Tick>& access_times = getAccessTimes(entry);
+            Tick nextAccessTime = 0;
+            bool foundNextAccess = false;
+            for (Tick access_time : access_times) {
+                if (access_time > currentTime) {
+                    nextAccessTime = access_time;
+                    foundNextAccess = true;
+                    break;
+                }
+            }
+            if (!foundNextAccess) {
+                return entry;
+            }
+            if (nextAccessTime > maxNextAccessTime) {
+                maxNextAccessTime = nextAccessTime;
+                victim = entry;
+            }
+        }
 
         assert(isTagPresent(victim));
         return victim;
@@ -273,6 +330,9 @@ protected:
     std::unordered_map<Addr, int> P; // the P set for maintaining P
     std::set<Addr> Q; // the lines that are dirty but not privately cached
     mutable std::unordered_map<Addr, Tick> cache_last_access;
+
+    // Cache access map: maps address to vector of access times
+    std::unordered_map<Addr, std::vector<Tick>> cache_access_map;
 
     std::vector<int> CRECountPerSet; // The number of CRE per set, initialized to be all zeros
     std::vector<std::vector<bool>> isCRE;
