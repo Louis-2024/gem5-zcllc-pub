@@ -23,19 +23,19 @@ MessageBuffer *responseToCache, network = "To", virtual_network = "2",
                                 vnet_type = "response";
 MessageBuffer *requestFromCache, network = "From", virtual_network = "0",
                                  vnet_type = "request";
-// These channels are not used if we enable split bus                            
+// These channels are not used if we enable split bus
 // vnet 2 is dedicated to cache-to-cache transfer when split-bus is enabled
 MessageBuffer *responseFromCache, network = "From", virtual_network = "2",
                                   vnet_type = "response";
 // NOTE: peek from requestFromOrdered should only be processed if the request CAN be processed...
 // NOTE: the request sent to requestToOrder will be ordered in the PerfectTDMSwitch and will be serviced back later
-// NOTE: all memory request should be ordered even in the case of ZIV + ROC because a later reqeust can 
+// NOTE: all memory request should be ordered even in the case of ZIV + ROC because a later reqeust can
 // Occupy a CRE
 MessageBuffer *requestToOrder, network = "To", virtual_network = "3",
                                   vnet_type = "request";
 MessageBuffer *requestFromOrdered, network = "From", virtual_network = "3",
                                   vnet_type = "request";
-// used only in split bus                            
+// used only in split bus
 bool splitBus;
 MessageBuffer * responseToBusOnly, network="To", virtual_network="6", vnet_type="response";
 MessageBuffer * responseFromBusOnly, network="From", virtual_network="6", vnet_type="response";
@@ -136,7 +136,7 @@ MessageBuffer *responseFromMemory;
     }
     TBETable TBEs, template="<Directory_TBE>", constructor="m_number_of_TBEs";
     TBETable WB_TBEs, template="<Directory_TBE>", constructor="m_wb_buffer_size";
-    
+
 
     Tick clockEdge();
     Entry getDirectoryEntry(Addr addr), return_by_pointer = "yes" {
@@ -148,8 +148,8 @@ MessageBuffer *responseFromMemory;
       }
       return dir_entry;
     }
-    
-    
+
+
     Entry getCacheEntry(Addr addr), return_by_pointer = "yes" {
 
         DPRINTF(RubySlicc, "getCacheEntry:\n");
@@ -179,7 +179,7 @@ MessageBuffer *responseFromMemory;
         int owner := getCurSlotOwnerHelper(curCycle(), 128, 4);
         return owner;
     }
-    
+
  State getState(TBE tbe, Entry cache_entry, Addr addr) {
       DPRINTF(RubySlicc, "Getting state for... %#x %p\n", addr, cache_entry);
       // TBE does not really play a role here
@@ -235,7 +235,7 @@ MessageBuffer *responseFromMemory;
           return Directory_State_to_permission(e.DirState);
       } /* else {
         DPRINTF(RubySlicc, "%s\n", AccessPermission:NotPresent);
-          return AccessPermission:NotPresent;    
+          return AccessPermission:NotPresent;
       }*/
       //return AccessPermission:NotPresent;
       // cache line not present should be read and write
@@ -276,7 +276,7 @@ MessageBuffer *responseFromMemory;
             num_functional_writes := num_functional_writes + 1;
         }
         return num_functional_writes;
-      }  
+      }
       if (functionalMemoryWrite(pkt)) {
          num_functional_writes := num_functional_writes + 1;
       }
@@ -284,7 +284,7 @@ MessageBuffer *responseFromMemory;
   }
 
   include "LC-MSI-dir-ports.sm";
-  
+
   action(markLLCDone, "mLD", desc="Mark LLC Done") {
     bus.markLLCDone();
   }
@@ -318,7 +318,7 @@ MessageBuffer *responseFromMemory;
   action(clearPutSDelayMarkDone, "mclrmd", desc="") {
     delayMarkDone := false;
   }
-  
+
   action(markLLCDoneIfNotSplitBusWithData, "mLDSbd", desc="Mark LLC Done if this is split bus transaction") {
     if(!splitBus) {
         bus.markLLCDone(true);
@@ -341,7 +341,12 @@ MessageBuffer *responseFromMemory;
   }
 
   action(recordCacheAccess, 'rLLC', desc="Record Cache Access") {
-    xyzCacheMemory.recordCacheAccess(address);
+    peek(request_in, RequestMsg) {
+      if (in_msg.Type == CoherenceRequestType:GetS ||
+          in_msg.Type == CoherenceRequestType:GetM) {
+        xyzCacheMemory.recordCacheAccess(address);
+      }
+    }
   }
 
   action(allocteROCTBE, 'aTBE', desc="Allocate tbe entry for RoC for current pending request") {
@@ -505,7 +510,7 @@ MessageBuffer *responseFromMemory;
                 out_msg.Len := 0;
             }
     }
-    // PMSI* fix only for write back from 
+    // PMSI* fix only for write back from
     action(sendRespDataToMem, "rw", desc="Write data to memory from resp") {
         if(splitBus) {
             peek(response_bus_in, ResponseMsg) {
@@ -553,7 +558,7 @@ MessageBuffer *responseFromMemory;
           }
       }
   }
-  
+
   action(xyzSetOwner, 'xyzSO', desc="...") {
     xyzCacheMemory.markOwner(address);
   }
@@ -736,7 +741,7 @@ MessageBuffer *responseFromMemory;
 
   action(stall, "z", desc="Stall the incoming request") {
       // Do nothing.
-  }  
+  }
   action(allocateCacheBlock, "aC", desc="Allocate a cache block") {
     assert(is_invalid(cache_entry));
     assert(xyzCacheMemory.xyzCREAvail(address));
@@ -784,7 +789,7 @@ MessageBuffer *responseFromMemory;
   }
   action(copyDataToEntry, "cpent", desc="Copy data from core to entry (instead of to mem)") {
 
-      peek(request_in, RequestMsg) {      
+      peek(request_in, RequestMsg) {
           assert(is_valid(cache_entry));
           cache_entry.DataBlk := in_msg.DataBlk;
           DPRINTF(RubySlicc, "copyDataToEntry: the request message: %s fitting into LLC entry\n", in_msg);
@@ -793,7 +798,7 @@ MessageBuffer *responseFromMemory;
   }
   action(copyDataFromRespToEntry, "cprent", desc="Copy data from core to entry (instead of to mem)") {
 
-      peek(response_in, ResponseMsg) {      
+      peek(response_in, ResponseMsg) {
           assert(is_valid(cache_entry));
           cache_entry.DataBlk := in_msg.DataBlk;
           DPRINTF(RubySlicc, "copyDataToEntry: the request message: %s fitting into LLC entry\n", in_msg);
@@ -888,12 +893,12 @@ MessageBuffer *responseFromMemory;
 
 
   /* action(wakeupAndRetryRequest, 'wrt', desc="Wakeup and retry") {
-      
+
   } */
 
   // Back-invalidations, should not exist for other stuff
   // The following cases cannot be handled within a slot
-  
+
   // Can be only on...
   transition(LLCOnly, Replacement, LLCOnly_m) {
     nozcllcguard;
@@ -902,8 +907,8 @@ MessageBuffer *responseFromMemory;
 
       incrementCacheEntryMemAckCount;
       allocateWBTBE;
-      migrateCacheToWBCBE; 
-      
+      migrateCacheToWBCBE;
+
 
       sendLLCDataToMem;
       fwdToOrderFromReq;
@@ -926,7 +931,7 @@ MessageBuffer *responseFromMemory;
   transition({LLCOnly, I, S, M, S_m, LLCOnly_m, M_m, II_m, II_dm}, Order) {
       fwdToOrderFromReq;
       popRequestQueue;
-      
+
       markLLCDone;
   }
 
@@ -942,10 +947,10 @@ MessageBuffer *responseFromMemory;
     guardSplitBus;
       fwdToOrderFromReq;
       popRequestQueue;
-      
+
       markLLCDoneIfSplitBus;
   }
-  
+
 
 
 
@@ -955,7 +960,7 @@ MessageBuffer *responseFromMemory;
 
       incrementCacheEntryMemAckCount;
       allocateWBTBE;
-      migrateCacheToWBCBE; 
+      migrateCacheToWBCBE;
 
       sendLLCDataToMem;
 
@@ -963,7 +968,7 @@ MessageBuffer *responseFromMemory;
 
       delayPutSmarkLLCDone;
   }
-  
+
   transition(LLCOnly, GetS, S) {
     recordCacheAccess;
     deallocateROCTBE;
@@ -984,10 +989,10 @@ MessageBuffer *responseFromMemory;
     xyzSetOwner;
     sendLLCToReq;
     popRequestQueue;
-    
+
     markLLCDone_WaitForDataIfNonSplit;
   }
-  
+
   // allocateROCTBE only used when doing replacement and request has to be ordered
   transition(I, GetS, S_m) {
       recordCacheAccess;
@@ -1069,7 +1074,7 @@ MessageBuffer *responseFromMemory;
       popRequestQueue;
       markLLCDone;
     }
-  
+
   transition({S, S_D, SS_m, S_m}, PutSNotLast) {
       xyzRemoveFromSharers;
       removeReqFromSharers;
@@ -1095,9 +1100,9 @@ MessageBuffer *responseFromMemory;
       markLLCDoneIfSplitBus;
       markLLCDoneIfNonDelayAndNonSplit;
   }
-  
 
-  
+
+
   transition(S, PutSLast, LLCOnly) { // TODO: To LLCOnly
       xyzRemoveFromSharers;
       removeReqFromSharers;
@@ -1114,12 +1119,12 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
       // WB buffer ops
       incrementCacheEntryMemAckCount;
       allocateWBTBE;
-      migrateCacheToWBCBE; 
-      
+      migrateCacheToWBCBE;
+
       sendLLCDataToMem;
       xyzRemoveFromSharers;
       removeReqFromSharers;
-      
+
       sendPutAck;
       popRequestQueue;
 
@@ -1156,7 +1161,7 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
     kd_wakeUpDependents;
 
   }
-  
+
   // This transition is still needed, and should mark the slot end
   // PMSI* fix
   // transition(M, GetS, S_D) {
@@ -1204,7 +1209,7 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
 
     incrementCacheEntryMemAckCount;
     allocateWBTBE;
-    migrateCacheToWBCBE; 
+    migrateCacheToWBCBE;
 
     recReplShared;
     // nozivguard;
@@ -1227,17 +1232,17 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
     guardOnlyInCache;
     recReplOwned;
     nozivguard;
-   
+
     incrementCacheEntryMemAckCount;
     allocateWBTBE;
-    migrateCacheToWBCBE;  
+    migrateCacheToWBCBE;
 
     //allocteROCTBE;
     fwdToOrderFromReq;
     sendFwdGetMInv;
     clearOwner;
     popRequestQueue;
-    
+
     markLLCDoneIfSplitBus;
   }
   transition(II_dm, Data, II_m) {
@@ -1306,7 +1311,7 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
       markLLCDone;
   }
 
-  // A line in MI_m may still in the cache, and could be silently evicted 
+  // A line in MI_m may still in the cache, and could be silently evicted
   // due to XYZ
   transition(M, PutMOwnerWT, MI_m) {
       // mark clean and create CRE (or Not?), like another event PutMOwnerCreateCRE
@@ -1376,11 +1381,11 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
   transition(LLCOnly, LastMemAck) {
     guardSplitBus;
     guardOnlyInCache;
-    
+
      // may have been deallocated already?
     decrementCacheEntryMemAckCount;
 
-    popMemQueue;   
+    popMemQueue;
   }
 
   // transition(S_D, {GetS, GetM, Replacement}) {
@@ -1390,7 +1395,7 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
       guardSplitBus;
       fwdToOrderFromReq;
       popRequestQueue;
-      
+
       markLLCDone;
   }
 
@@ -1490,7 +1495,7 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
 
 
     deallocateWBTBE;
-    
+
     markLLCDone;
   }
 
@@ -1509,7 +1514,7 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
     popRequestQueue;
 
     deallocateWBTBE;
-    
+
     markLLCDone;
   }
   transition(MI_m, GetS, S) {

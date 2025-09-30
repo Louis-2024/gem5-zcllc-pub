@@ -4,9 +4,11 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <set>
 #include <map>
 #include <vector>
 #include <fstream>
+#include <algorithm>
 #include "debug/ZIVCache.hh"
 
 #include "base/statistics.hh"
@@ -90,7 +92,7 @@ public:
             CRECountPerSet[e->getSet()] -= 1;
             CRETotal -= 1;
         }
-        
+
     }
     virtual void markOwner(Addr address) {
         if(!m_ziv) return;
@@ -166,7 +168,7 @@ public:
     virtual void recordCacheAccess(Addr address) {
         if(!m_ziv) return;
         cache_last_access[address] = curTick();
-        
+
         if (cache_next_access.is_open()) {
             cache_next_access << std::hex << address << "," << std::dec << cache_last_access[address] << std::endl;
             cache_next_access.flush();
@@ -226,7 +228,7 @@ public:
                             getVictim(candidates)->getWay()];
     }
     Addr xyzCacheProbe(Addr address) const {
-        
+
         // Just probe arbitrary line so that we can create a CRE
         if(!m_ziv) return cacheProbe(address);
         // probe an address, but we must assume there is no CRE
@@ -234,21 +236,23 @@ public:
         // We now needs to select a cache line from Q
         // TODO: use a more intelligent replacement policy
         assert(Q.size() > 0);
-        
+
         // implement belady's algorithm
-        Addr victim = *Q.begin();
-        
+        int index = (int) rand() % Q.size();
+        Addr victim = *std::next(Q.begin(), index);
+
         assert(isTagPresent(victim));
         return victim;
     }
     Addr simpleProbe(Addr address) const {
         if(!m_ziv) return cacheProbe(address);
-        
+
         assert(Q.size() >= 0);
-        
+
         // implement belady's algorithm
-        Addr victim = *Q.begin();
-        
+        int index = (int) rand() % Q.size();
+        Addr victim = *std::next(Q.begin(), index);
+
         assert(isTagPresent(victim));
         return victim;
     }
@@ -258,7 +262,7 @@ public:
     bool ziv_enabled() const {
         return m_ziv;
     }
-    
+
 
 protected:
     bool m_use_vi;
@@ -267,9 +271,8 @@ protected:
     std::unordered_map<Addr, Location> relocation_table;
     // Store the number of sharers for cache lines cached
     std::unordered_map<Addr, int> P; // the P set for maintaining P
-    std::unordered_set<Addr> Q; // the lines that are dirty but not privately cached
+    std::set<Addr> Q; // the lines that are dirty but not privately cached
     mutable std::unordered_map<Addr, Tick> cache_last_access;
-    mutable std::unordered_map<Addr, Tick> Q_last_access;
 
     std::vector<int> CRECountPerSet; // The number of CRE per set, initialized to be all zeros
     std::vector<std::vector<bool>> isCRE;
