@@ -47,6 +47,7 @@ parser.add_argument('--wb-buffer-size', type=int, help='', default=None)
 parser.add_argument('--c2c-latency', type=int, help='Cache to cache latency', default=1)
 parser.add_argument('--slot-width', type=int, help='Slot width (only used for non-split)', default=128)
 parser.add_argument('--llc-end-latency', type=int, help='LLC latency', default=5)
+parser.add_argument('--max-tick', type=int, help='Max number of ticks', default=0)
 args = parser.parse_args()
 
 
@@ -152,7 +153,13 @@ root = Root(full_system = False, system = system)
 m5.instantiate()
 
 print("Beginning simulation!")
-exit_event = m5.simulate()
+
+if (args.max_tick > 0):
+    print(f"Setting max_tick to {args.max_tick}")
+    exit_event = m5.simulate(args.max_tick)
+else:
+    exit_event = m5.simulate()
+
 print('Exiting @ tick {} because {}'.format(
          m5.curTick(), exit_event.getCause())
      )
