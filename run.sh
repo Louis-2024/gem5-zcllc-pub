@@ -11,6 +11,10 @@ rm -rf m5out
 #     configs/xyz/simple_ruby.py --wc --ncore 4 --wc --use-ziv --use-vi --l1-size 2kB --l2-size 8kB --l3-size 128kB \
 #     --program /gem5/Splash-3/codes/kernels/lu/contiguous_blocks/LU --cwd /gem5/Splash-3/codes/kernels/lu/contiguous_blocks --args "-p4 -n256 -b16"
 
+# PYTHONPATH="$PWD/configs:$PWD/build/X86_LC_MSI/python" ./build/X86_LC_MSI/gem5.fast \
+#     configs/xyz/simple_ruby.py --ncore 4 --wc --use-ziv --use-vi --l1-size 2kB --l2-size 8kB --l3-size 128kB \
+#     --program /gem5/Splash-3/codes/kernels/fft/FFT --cwd /gem5/Splash-3/codes/kernels/fft --args "-p4 -m16 -n16 -l4"
+
 # app test
 
 # PYTHONPATH="$PWD/configs:$PWD/build/X86_LC_MSI/python" ./build/X86_LC_MSI/gem5.fast \
