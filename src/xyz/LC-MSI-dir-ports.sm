@@ -5,12 +5,12 @@
   out_port(memQueue_out, MemoryMsg, requestToMemory);
 
   out_port(response_out_bus, ResponseMsg, responseToBusOnly);
-  
+
 
   in_port(memQueue_in, MemoryMsg, responseFromMemory) {
       if (memQueue_in.isReady(clockEdge())) {
           peek(memQueue_in, MemoryMsg) {
-              
+
               Entry e := getCacheEntry(in_msg.addr);
 
               TBE tbe := TBEs[in_msg.addr];
@@ -150,7 +150,7 @@
                         trigger(Event:ReplacementReorder, victim_addr, victim_entry, victim_tbe);
                         assert(false);  // unused transition
                 } else {
-                    // trigger replacement 
+                    // trigger replacement
                     if (in_msg.Type == CoherenceRequestType:GetS) {
                         trigger(Event:GetS, in_msg.addr, e, tbe);
                     } else if (in_msg.Type == CoherenceRequestType:GetM) {
@@ -179,7 +179,7 @@
                   assert(false);
                   assert(is_valid(e));
                   if (e.Owner.isElement(in_msg.Requestor)) {
-                      // TODO: check for invariant  
+                      // TODO: check for invariant
                      trigger(Event:PutMOwner, in_msg.addr, e, tbe);
                   } else {
                       // assert(false);
@@ -195,6 +195,11 @@
   in_port(request_in, RequestMsg, requestFromCache) {
       if (request_in.isReady(clockEdge())) {
           peek(request_in, RequestMsg) {
+
+              if (in_msg.Type == CoherenceRequestType:GetS || in_msg.Type == CoherenceRequestType:GetM) {
+                xyzCacheMemory.recordCacheAccess(in_msg.addr);
+              }
+
               // This include wired-back request...
               Entry e := getCacheEntry(in_msg.addr);
               TBE tbe := TBEs[in_msg.addr];
@@ -223,7 +228,7 @@
                   // Requesting on a cache line that needs to be ordered
                   trigger(Event:Order, in_msg.addr, e, tbe);
               } else if(in_msg.Type == CoherenceRequestType:GetS || in_msg.Type == CoherenceRequestType:GetM) {
-                  assert(xyzCacheMemory.vi_enabled() == false || xyzCacheMemory.calculateVIwithDelta(0, 0, sum_prv_capacity)); 
+                  assert(xyzCacheMemory.vi_enabled() == false || xyzCacheMemory.calculateVIwithDelta(0, 0, sum_prv_capacity));
                     DPRINTF(RubySlicc, "Hitting a GetM or GetS\n");
                     DPRINTF(RubySlicc, "is_invalid(e): %d\n", is_invalid(e));
                     DPRINTF(RubySlicc, "xyzCacheMemory.xyzCREAvail(in_msg.addr): %x %d\n", in_msg.addr, xyzCacheMemory.xyzCREAvail(in_msg.addr));
@@ -245,7 +250,7 @@
                           // assert(victim_entry.DirState == State:LLCOnly);
                           trigger(Event:Replacement, victim_addr, victim_entry, victim_tbe);
                   } else {
-                      // trigger replacement 
+                      // trigger replacement
                       if (in_msg.Type == CoherenceRequestType:GetS) {
                           if(is_valid(tbe)) {
                             trigger(Event:GetS, in_msg.addr, e, tbe);
@@ -268,7 +273,7 @@
                       }
                   }
               } else if (in_msg.Type == CoherenceRequestType:PutS) {
-                  // assert(xyzCacheMemory.vi_enabled() == false || xyzCacheMemory.calculateVIwithDelta(0, 0, sum_prv_capacity)); 
+                  // assert(xyzCacheMemory.vi_enabled() == false || xyzCacheMemory.calculateVIwithDelta(0, 0, sum_prv_capacity));
                   //assert(is_valid(e));
                   // If there is only a single sharer (i.e., the requestor)
                   if(is_invalid(e)) {
@@ -310,7 +315,7 @@
                   }
               } else if (in_msg.Type == CoherenceRequestType:PutM) {
                   // we don't need to check for PUTs
-                  // assert(xyzCacheMemory.vi_enabled() == false || xyzCacheMemory.calculateVIwithDelta(0, 0, sum_prv_capacity)); 
+                  // assert(xyzCacheMemory.vi_enabled() == false || xyzCacheMemory.calculateVIwithDelta(0, 0, sum_prv_capacity));
                   DPRINTF(RubySlicc, "Decoding PutM for %#x\n", in_msg.addr);
                   if (is_valid(e) && e.Owner.isElement(in_msg.Requestor)) {
                       // TODO: check for invariant

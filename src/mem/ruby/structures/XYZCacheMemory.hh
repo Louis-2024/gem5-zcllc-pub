@@ -4,8 +4,11 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <set>
 #include <map>
 #include <vector>
+#include <fstream>
+#include <algorithm>
 #include "debug/ZIVCache.hh"
 
 #include "base/statistics.hh"
@@ -23,6 +26,7 @@
 // #include "params/RubyCache.hh"
 #include "params/XYZCache.hh"
 #include "sim/sim_object.hh"
+#include "sim/cur_tick.hh"
 
 namespace gem5 {
 
@@ -88,7 +92,7 @@ public:
             CRECountPerSet[e->getSet()] -= 1;
             CRETotal -= 1;
         }
-        
+
     }
     virtual void markOwner(Addr address) {
         if(!m_ziv) return;
@@ -142,6 +146,7 @@ public:
         assert(Q.find(address) != Q.end());
         assert(P.find(address) == P.end());
         Q.erase(address);
+        cache_last_access.erase(address);
         auto e = lookup(address);
         auto row = e->getSet();
         auto way = e->getWay();
@@ -159,6 +164,26 @@ public:
         if(!m_ziv) return cacheAvail(address);
         return CRETotal > 0;
     }
+
+    virtual void recordCacheAccess(Addr address) {
+        if(!m_ziv) return;
+        cache_last_access[address] = curTick();
+
+        if (cache_next_access.is_open()) {
+            cache_next_access << std::hex << address << "," << std::dec << cache_last_access[address] << std::endl;
+            cache_next_access.flush();
+        }
+    }
+
+    // Load cache access map from file
+    void loadCacheAccessMap(const std::string& filename);
+
+    // Get access times for a given address
+    const std::vector<Tick>& getAccessTimes(Addr address) const;
+
+    // Check if address exists in access map
+    bool hasAccessTimes(Addr address) const;
+
     bool checkCRE(Addr address) {
         panic_if(!m_ziv, "Relocation when ziv is not used");
         assert(isTagPresent(address));
@@ -212,7 +237,7 @@ public:
                             getVictim(candidates)->getWay()];
     }
     Addr xyzCacheProbe(Addr address) const {
-        
+
         // Just probe arbitrary line so that we can create a CRE
         if(!m_ziv) return cacheProbe(address);
         // probe an address, but we must assume there is no CRE
@@ -220,15 +245,73 @@ public:
         // We now needs to select a cache line from Q
         // TODO: use a more intelligent replacement policy
         assert(Q.size() > 0);
+
+        // implement belady's algorithm
+        Tick currentTime = curTick();
+        Tick maxNextAccessTime = 0;
         Addr victim = *Q.begin();
+
+        for (Addr entry : Q) {
+            if (!hasAccessTimes(entry)) {
+                DPRINTF(ZIVCache, "Warning: Missing address %#x \n", address);
+                return entry;
+            }
+            const std::vector<Tick>& access_times = getAccessTimes(entry);
+            Tick nextAccessTime = 0;
+            bool foundNextAccess = false;
+            for (Tick access_time : access_times) {
+                if (access_time > currentTime) {
+                    nextAccessTime = access_time;
+                    foundNextAccess = true;
+                    break;
+                }
+            }
+            if (!foundNextAccess) {
+                return entry;
+            }
+            if (nextAccessTime > maxNextAccessTime) {
+                maxNextAccessTime = nextAccessTime;
+                victim = entry;
+            }
+        }
+
         assert(isTagPresent(victim));
         return victim;
     }
     Addr simpleProbe(Addr address) const {
         if(!m_ziv) return cacheProbe(address);
-        
-        // assert(Q.size() >= 0);
+
+        assert(Q.size() > 0);
+
+        // implement belady's algorithm
+        Tick currentTime = curTick();
+        Tick maxNextAccessTime = 0;
         Addr victim = *Q.begin();
+
+        for (Addr entry : Q) {
+            if (!hasAccessTimes(entry)) {
+                DPRINTF(ZIVCache, "Warning: Missing address %#x \n", address);
+                return entry;
+            }
+            const std::vector<Tick>& access_times = getAccessTimes(entry);
+            Tick nextAccessTime = 0;
+            bool foundNextAccess = false;
+            for (Tick access_time : access_times) {
+                if (access_time > currentTime) {
+                    nextAccessTime = access_time;
+                    foundNextAccess = true;
+                    break;
+                }
+            }
+            if (!foundNextAccess) {
+                return entry;
+            }
+            if (nextAccessTime > maxNextAccessTime) {
+                maxNextAccessTime = nextAccessTime;
+                victim = entry;
+            }
+        }
+
         assert(isTagPresent(victim));
         return victim;
     }
@@ -238,7 +321,7 @@ public:
     bool ziv_enabled() const {
         return m_ziv;
     }
-    
+
 
 protected:
     bool m_use_vi;
@@ -247,7 +330,11 @@ protected:
     std::unordered_map<Addr, Location> relocation_table;
     // Store the number of sharers for cache lines cached
     std::unordered_map<Addr, int> P; // the P set for maintaining P
-    std::unordered_set<Addr> Q; // the lines that are dirty but not privately cached
+    std::set<Addr> Q; // the lines that are dirty but not privately cached
+    mutable std::unordered_map<Addr, Tick> cache_last_access;
+
+    // Cache access map: maps address to vector of access times
+    std::unordered_map<Addr, std::vector<Tick>> cache_access_map;
 
     std::vector<int> CRECountPerSet; // The number of CRE per set, initialized to be all zeros
     std::vector<std::vector<bool>> isCRE;
@@ -255,6 +342,8 @@ protected:
     int pri_tot = -1;
 
     int totalPrivateCache = 0;
+
+    static std::ofstream cache_next_access;
 
 private:
     // We don't need to copy this

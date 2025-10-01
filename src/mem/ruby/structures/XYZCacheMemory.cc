@@ -14,6 +14,7 @@
 #include "mem/cache/replacement_policies/weighted_lru_rp.hh"
 #include "mem/ruby/protocol/AccessPermission.hh"
 #include "mem/ruby/system/RubySystem.hh"
+#include <sstream>
 
 namespace gem5 {
 
@@ -28,7 +29,7 @@ XYZCacheMemory::XYZCacheMemory(const XYZCacheParams &p)
             panic_if(!m_ziv, "ziv must be set when use_vi is enabled");
         }
         pri_tot = p.pri_tot;
-        
+
 }
 
 void XYZCacheMemory::init() {
@@ -39,6 +40,8 @@ void XYZCacheMemory::init() {
     isCRE.resize(m_cache_num_sets,
                     std::vector<bool>(m_cache_assoc, 1));
     CRETotal = getNumBlocks();
+
+    loadCacheAccessMap("cache_access_map.txt");
 }
 
 
@@ -79,10 +82,10 @@ XYZCacheMemory::allocate(Addr address, AbstractCacheEntry *entry)
 {
     if(!m_ziv) return CacheMemory::allocate(address, entry);
     DPRINTF(ZIVCache, "ZIV cache is allocating space for %#x\n", address);
-    
+
     // TODO: need changes
     // m_tag_index for relocation, we want lookup in parent class
-    // to always fail for relocated cache lines to 
+    // to always fail for relocated cache lines to
     // fall back on our version
     assert(address == makeLineAddress(address));
     assert(!isTagPresent(address));
@@ -99,11 +102,11 @@ XYZCacheMemory::allocate(Addr address, AbstractCacheEntry *entry)
         auto targetLocation = locateCRE(address);
         auto e = cacheProbeEntry(address);
         relocateVictim(e, targetLocation);
-        
+
         assert(cacheAvail(address));
         new_entry = CacheMemory::allocate(address, entry);
     }
-    // the cache line is technical a CRE when allocate ends because it is 
+    // the cache line is technical a CRE when allocate ends because it is
     // not cached by any core, later, the SM will call the AddSharers, MakeOwners etc to make this line non CRE
     // if it was a vacan entry, allocate would not modify that entry
     // otherwise, the relocation will leave the entry fresh
@@ -121,6 +124,7 @@ void XYZCacheMemory::deallocate(Addr address) {
     assert(Q.find(address) == Q.end()); // should be clean and safe to deallocate
     DPRINTF(ZIVCache, "ZIV cache is deallocating %#x with cacheMemory method\n", address);
     CacheMemory::deallocate(address);
+    cache_last_access.erase(address);
     // This must be after deallocate since it uses lookup to find the location
     auto it = relocation_table.find(address);
     if(it != relocation_table.end()) {
@@ -132,8 +136,8 @@ void XYZCacheMemory::deallocate(Addr address) {
 
 void XYZCacheMemory::reportInvariant(Addr address) {
     if(!m_ziv) return;
-    DPRINTF(ZIVCache, "INVCHK >> M = %d, |P| = %d, |Q| = %d | N*T = %d, sum(|C|) = %d, CRETotal = %d\n", 
-        getNumBlocks(), getPrv(), getNotSync(), 
+    DPRINTF(ZIVCache, "INVCHK >> M = %d, |P| = %d, |Q| = %d | N*T = %d, sum(|C|) = %d, CRETotal = %d\n",
+        getNumBlocks(), getPrv(), getNotSync(),
         pri_tot, totalPrivateCache, CRETotal
     );
 
@@ -180,7 +184,7 @@ void XYZCacheMemory::relocateVictim(AbstractCacheEntry* entry, Location targetLo
         if(selfRelocation) {
             assert(orig_row == row && orig_loc == loc);
             DPRINTF(ZIVCache, "ZIV: self-relocation\n");
-            
+
         }
         deallocate(targetEntry->m_Address);
         // should now be released
@@ -194,7 +198,7 @@ void XYZCacheMemory::relocateVictim(AbstractCacheEntry* entry, Location targetLo
 
     m_cache[orig_row][orig_loc] = nullptr;
     // move the entry to targetLocation
-    // relocated line 
+    // relocated line
     m_tag_index[entry->m_Address] = -2; // -2 meaning a cache line is relocated, check the relocation table
     entry->setPosition(row, loc);
     entry->replacementData = replacement_data[row][loc];
@@ -222,6 +226,63 @@ void XYZCacheMemory::relocateVictim(AbstractCacheEntry* entry, Location targetLo
     // replacement policies.
     m_replacementPolicy_ptr->reset(entry->replacementData);
     */
+}
+
+std::ofstream XYZCacheMemory::cache_next_access("cache_next_access.log");
+
+void XYZCacheMemory::loadCacheAccessMap(const std::string& filename) {
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        DPRINTF(ZIVCache, "Cache access map file %s not found, skipping load\n", filename);
+        return;
+    }
+
+    std::string line;
+    int line_count = 0;
+    int loaded_entries = 0;
+
+    while (std::getline(file, line)) {
+        line_count++;
+
+        std::istringstream iss(line);
+        std::string token;
+        std::vector<std::string> tokens;
+
+        while (std::getline(iss, token, ',')) {
+            token.erase(0, token.find_first_not_of(" \t\r\n"));
+            token.erase(token.find_last_not_of(" \t\r\n") + 1);
+            if (!token.empty()) {
+                tokens.push_back(token);
+            }
+        }
+
+        Addr address = std::stoull(tokens[0], nullptr, 16);
+        std::vector<Tick> access_times;
+        for (size_t i = 1; i < tokens.size(); i++) {
+            Tick access_time = std::stoull(tokens[i]);
+            access_times.push_back(access_time);
+        }
+
+        cache_access_map[address] = access_times;
+        loaded_entries++;
+    }
+
+    file.close();
+    DPRINTF(ZIVCache, "Loaded %d entries from cache access map file %s\n",
+            loaded_entries, filename);
+}
+
+const std::vector<Tick>& XYZCacheMemory::getAccessTimes(Addr address) const {
+    static const std::vector<Tick> empty_vector;
+    auto it = cache_access_map.find(address);
+    if (it != cache_access_map.end()) {
+        return it->second;
+    }
+    return empty_vector;
+}
+
+bool XYZCacheMemory::hasAccessTimes(Addr address) const {
+    return cache_access_map.find(address) != cache_access_map.end();
 }
 
 }; // namespace ruby
