@@ -2,6 +2,7 @@
 #include "xyz/XYZStatsObject.hh"
 
 #include <iostream>
+#include <fstream>
 
 namespace gem5::ruby
 {
@@ -34,5 +35,7 @@ void XYZStatsObject::regStats() {
     wt_putsRatio = total_puts_as_wt / total_puts;
     wt_putmRatio = total_putm_as_wt / total_putm;
 }
+
+std::ofstream XYZStatsObject::cache_access_log("cache_access.log");
 
 } // namespace gem5

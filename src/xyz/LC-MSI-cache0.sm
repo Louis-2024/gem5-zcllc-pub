@@ -217,6 +217,7 @@ machine(MachineType:L0Cache, "LC-MSI cache")
     if(mandatory_in.isReady(clockEdge())) {
       peek(mandatory_in, RubyRequest) {
         // Should not trigger here
+        xyzStatsObject.recordCacheAccess(in_msg.LineAddress);
         TBE tbe := TBEs[in_msg.LineAddress];
         Entry cache_entry := getCacheEntry(in_msg.LineAddress);
         if(TBEs.cnt() > 0) {

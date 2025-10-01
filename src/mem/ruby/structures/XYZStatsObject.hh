@@ -1,6 +1,8 @@
 #ifndef __MEM_RUBY_STRUCTURES_XYZSTATSOBJECT_HH__
 #define __MEM_RUBY_STRUCTURES_XYZSTATSOBJECT_HH__
 
+#include <fstream>
+
 #include "params/XYZStatsObject.hh"
 #include "sim/sim_object.hh"
 #include "sim/clocked_object.hh"
@@ -13,6 +15,10 @@ namespace gem5::ruby {
     class XYZStatsObject: public ClockedObject 
     {
         using Base = ClockedObject;
+
+    private:
+        static std::ofstream cache_access_log;
+
     public:
         XYZStatsObject(const XYZStatsObjectParams &p);
 
@@ -78,6 +84,13 @@ namespace gem5::ruby {
                 total_put_as_wt++;
             }
         };
+
+        void recordCacheAccess(Addr address) {
+            if (cache_access_log.is_open()) {
+                cache_access_log << std::hex << address << "," << std::dec << curTick() << std::endl;
+                cache_access_log.flush();
+            }
+        }
     };
 };
 
