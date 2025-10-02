@@ -238,28 +238,31 @@ public:
         Tick maxNextAccessTime = 0;
         Addr victim = *Q.begin();
         for (Addr entry : Q) {
+            // Choose as victim if current entry is not recorded
             if (!hasAccessTimes(entry)) {
-                DPRINTF(ZIVCache, "Warning: Missing address %#x \n", address);
-                return entry;
+                DPRINTF(ZIVCache, "Belady: Missing address %#x \n", address);
+                victim = entry;
+                break;
             }
+
             const std::vector<Tick>& access_times = getAccessTimes(entry);
             Tick nextAccessTime = 0;
-            bool foundNextAccess = false;
             for (Tick access_time : access_times) {
                 if (access_time > currentTime) {
                     nextAccessTime = access_time;
-                    foundNextAccess = true;
                     break;
                 }
             }
-            if (!foundNextAccess) {
-                return entry;
-            }
+
             if (nextAccessTime > maxNextAccessTime) {
                 maxNextAccessTime = nextAccessTime;
                 victim = entry;
+            } else if (nextAccessTime == 0) {
+                victim = entry;
+                break;
             }
         }
+        DPRINTF(ZIVCache, "Belady: Address %#x with next access at %llu is chosen as victim \n", victim, maxNextAccessTime);
 
         assert(isTagPresent(victim));
         return victim;
@@ -274,28 +277,31 @@ public:
         Tick maxNextAccessTime = 0;
         Addr victim = *Q.begin();
         for (Addr entry : Q) {
+            // Choose as victim if current entry is not recorded
             if (!hasAccessTimes(entry)) {
-                DPRINTF(ZIVCache, "Warning: Missing address %#x \n", address);
-                return entry;
+                DPRINTF(ZIVCache, "Belady: Missing address %#x \n", address);
+                victim = entry;
+                break;
             }
+
             const std::vector<Tick>& access_times = getAccessTimes(entry);
             Tick nextAccessTime = 0;
-            bool foundNextAccess = false;
             for (Tick access_time : access_times) {
                 if (access_time > currentTime) {
                     nextAccessTime = access_time;
-                    foundNextAccess = true;
                     break;
                 }
             }
-            if (!foundNextAccess) {
-                return entry;
-            }
+
             if (nextAccessTime > maxNextAccessTime) {
                 maxNextAccessTime = nextAccessTime;
                 victim = entry;
+            } else if (nextAccessTime == 0) {
+                victim = entry;
+                break;
             }
         }
+        DPRINTF(ZIVCache, "Belady: Address %#x with next access at %llu is chosen as victim \n", victim, maxNextAccessTime);
 
         assert(isTagPresent(victim));
         return victim;
