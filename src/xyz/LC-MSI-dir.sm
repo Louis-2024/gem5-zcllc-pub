@@ -122,6 +122,7 @@ MessageBuffer *responseFromMemory;
         NetDest Owner,          desc="Owner of this block";
         DataBlock DataBlk,       desc="Data in the block";
         bool isDirty,           desc="Specify whether we really need to perform memory transaction";
+        Tick LastAccessTime,    desc="Last access time from L2 cache";
 
         int MemAckOutstanding,  desc="Number of outstanding Acks from the main memory";
     }
@@ -881,6 +882,12 @@ MessageBuffer *responseFromMemory;
   action(guardInWBTBE, "gOIW", desc="Invariant that ensures that stable states will only reside in cache and not TBE") {
     assert(is_valid(tbe));
   }
+  action(recordLastAccessTime, "rlat", desc="Record last access time from L2") {
+    peek(request_in, RequestMsg) {
+        // Store the last access time in the LLC entry
+        cache_entry.LastAccessTime := in_msg.LastAccessTime;
+    }
+  }
 
 
   /* action(wakeupAndRetryRequest, 'wrt', desc="Wakeup and retry") {
@@ -1286,6 +1293,7 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
   transition(M, PutMOwner, LLCOnly) {
       // mark clean and create CRE (or Not?), like another event PutMOwnerCreateCRE
       copyDataToEntry;
+      recordLastAccessTime;
       // sendDataToMem;
       xyzRemoveFromSharers;
       clearOwner;

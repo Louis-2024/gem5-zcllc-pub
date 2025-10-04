@@ -49,6 +49,14 @@ namespace gem5::ruby {
             }
         }
 
+        Cycles getCycle() {
+            return curCycle();
+        }
+
+        Tick getTick() {
+            return cyclesToTicks(curCycle());
+        }
+
         void regStats() override;        
         void recordReplShared() {
             total_repl++;

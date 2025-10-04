@@ -94,6 +94,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
   structure(Entry, desc="Cache entry", interface="AbstractCacheEntry") {
     State CacheState,        desc="cache state";
     DataBlock DataBlk,       desc="Data in the block";
+    Tick LastAccessTime,     desc="Last access time of this line";
   }
 
   structure(TBE, desc="Entry for transient requests") {
@@ -402,6 +403,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
           out_msg.Requestor := machineID;
           out_msg.is_reordered := false;
           out_msg.isWritebackRequest := true;
+          out_msg.LastAccessTime := cache_entry.LastAccessTime;
       }
   }
   action(sendCacheDataToReq, "cdR", desc="Send cache data to requestor") {
@@ -769,6 +771,11 @@ machine(MachineType:L1Cache, "LC-MSI cache")
         out_msg.MessageSize := MessageSizeType:Control;
     }
   }
+  action(updateLastAccessTime, "ulat", desc="Update last access time") {
+    assert(is_valid(cache_entry));
+    cache_entry.LastAccessTime := xyzStatsObject.getTick();
+  }
+
   transition(I, Load, IS_D) {
     tic;
     allocateCacheBlock;
@@ -797,6 +804,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     toc;
     writeDataToCache;
     deallocateTBE;
+    updateLastAccessTime;
     externalLoadHitM;
     popResponseQueue;
     kd_wakeUpDependents;
@@ -806,6 +814,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     toc;
     writeDataToCacheFromDir;
     deallocateTBE;
+    updateLastAccessTime;
     externalLoadHit;
     popDirResponseQueue;
     kd_wakeUpDependents;
@@ -828,6 +837,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     toc;
       writeDataToCache;
       deallocateTBE;
+      updateLastAccessTime;
       externalStoreHit;
       popResponseQueue;
     kd_wakeUpDependents;
@@ -836,6 +846,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     toc;
       writeDataToCacheFromDir;
       deallocateTBE;
+      updateLastAccessTime;
       externalStoreHit;
       popDirResponseQueue;
     kd_wakeUpDependents;
@@ -857,16 +868,19 @@ machine(MachineType:L1Cache, "LC-MSI cache")
   transition({IM_A, SM_A}, LastInvAck, M_P) {
     toc;
       deallocateTBE;
+      updateLastAccessTime;
       externalStoreHit;
       popResponseQueue;
     kd_wakeUpDependents;
   }
 
   transition({S, SM_AD, SM_A}, Load) {
+      updateLastAccessTime;
       loadHit;
       popMandatoryQueue;
   }
   transition(M, Load, M_P) {
+    updateLastAccessTime;
     loadHitM;
     popMandatoryQueue;
   }
@@ -919,12 +933,14 @@ transition({SM_AD, SM_A}, {Store, Replacement}) {
   }
 
   transition(M, Store, M_P) {
+      updateLastAccessTime;
       storeHit;
       popMandatoryQueue;
   }
   // PMSI* fix
   // this could happen when a fast upgrading precedes
   transition(M_P, Store) {
+      updateLastAccessTime;
       storeHit;
       popMandatoryQueue;
   }

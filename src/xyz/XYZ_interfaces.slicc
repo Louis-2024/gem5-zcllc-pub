@@ -16,6 +16,9 @@ structure (XYZStatsObject, external = "yes") {
     void recordReplLLC();
     void tic();
     void toc();
+
+    Cycles getCycle();
+    Tick getTick();
 }
 
 structure (XYZCacheMemory, external = "yes") {

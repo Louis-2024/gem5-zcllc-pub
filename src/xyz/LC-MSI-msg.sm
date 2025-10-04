@@ -34,6 +34,8 @@ structure(RequestMsg, desc="Used for Cache->Dir and Fwd messages",
 
     bool is_reordered,            desc="Is this request ordered previously? This is used in TDMSwitch to decide whether put it in the back or in the front";
     bool isWritebackRequest,      desc="Is this writeback request a writeback (or a demand request if false)";
+    
+    Tick LastAccessTime, default="0", desc="Last access time of the evicted line";
 
     // This must be overridden here to support functional accesses
     bool functionalRead(Packet *pkt) {

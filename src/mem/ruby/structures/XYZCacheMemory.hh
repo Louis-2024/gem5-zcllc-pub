@@ -170,6 +170,16 @@ public:
             return true;
         }
     }
+
+    virtual Tick getLastAccessTime(Addr address) const {
+        if(!m_ziv) return 0;
+        auto entry = lookup(address);
+        if(entry) {
+            return entry->getLastAccess();
+        }
+        return 0;
+    }
+    
     Location locateCRE(Addr address) {
         // We could use a more intelligent policy
         // NOTE: the state in the LLC is either invalid or LLCOnly
@@ -220,15 +230,20 @@ public:
         // We now needs to select a cache line from Q
         // TODO: use a more intelligent replacement policy
         assert(Q.size() > 0);
+
         Addr victim = *Q.begin();
+        DPRINTF(ZIVCache, "XYZCacheProbe: returns %#x with last access at %llu \n", victim, getLastAccessTime(address));
+        
         assert(isTagPresent(victim));
         return victim;
     }
     Addr simpleProbe(Addr address) const {
         if(!m_ziv) return cacheProbe(address);
-        
-        // assert(Q.size() >= 0);
+        assert(Q.size() > 0);
+
         Addr victim = *Q.begin();
+        DPRINTF(ZIVCache, "SimpleProbe: returns %#x with last access at %llu \n", victim, getLastAccessTime(address));
+
         assert(isTagPresent(victim));
         return victim;
     }

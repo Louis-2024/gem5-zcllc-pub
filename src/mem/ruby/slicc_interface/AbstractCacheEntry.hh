@@ -110,7 +110,7 @@ class AbstractCacheEntry : public ReplaceableEntry
                                    // block, required by CacheMemory
 
     // Get the last access Tick.
-    Tick getLastAccess() { return m_last_touch_tick; }
+    Tick getLastAccess() const { return m_last_touch_tick; }
 
     // Set the last access Tick.
     void setLastAccess(Tick tick) { m_last_touch_tick = tick; }
