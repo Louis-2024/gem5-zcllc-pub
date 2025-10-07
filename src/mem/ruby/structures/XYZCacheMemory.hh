@@ -211,7 +211,7 @@ public:
         return m_cache[cacheSet][m_replacementPolicy_ptr->
                             getVictim(candidates)->getWay()];
     }
-    Addr xyzCacheProbe(Addr address) const {
+    Addr xyzCacheProbe(Addr address) {
         
         // Just probe arbitrary line so that we can create a CRE
         if(!m_ziv) return cacheProbe(address);
@@ -220,15 +220,44 @@ public:
         // We now needs to select a cache line from Q
         // TODO: use a more intelligent replacement policy
         assert(Q.size() > 0);
+
+        
         Addr victim = *Q.begin();
+        auto entry = lookup(address);
+        Tick last_access_time_1 = 0;
+        Tick last_access_time_2 = 0;
+        int access_count = 0;
+        if(entry) {
+            last_access_time_1 = entry->getLastAccess();
+            last_access_time_2 = entry->getAccessRecord().back();
+            access_count = entry->getAccessRecord().size();
+        }
+        DPRINTF(ZIVCache, "XYZCacheProbe: Victim %#x, last_access_1 %llu \n", victim, last_access_time_1);
+        DPRINTF(ZIVCache, "XYZCacheProbe: Victim %#x, last_access_2 %llu, access_count %d \n", victim, last_access_time_2, access_count);
+
+
         assert(isTagPresent(victim));
         return victim;
     }
-    Addr simpleProbe(Addr address) const {
+    Addr simpleProbe(Addr address) {
         if(!m_ziv) return cacheProbe(address);
-        
-        // assert(Q.size() >= 0);
+        assert(Q.size() > 0);
+
+
         Addr victim = *Q.begin();
+        auto entry = lookup(address);
+        Tick last_access_time_1 = 0;
+        Tick last_access_time_2 = 0;
+        int access_count = 0;
+        if(entry) {
+            last_access_time_1 = entry->getLastAccess();
+            last_access_time_2 = entry->getAccessRecord().back();
+            access_count = entry->getAccessRecord().size();
+        }
+        DPRINTF(ZIVCache, "SimpleProbe: Victim %#x, last_access_1 %llu \n", victim, last_access_time_1);
+        DPRINTF(ZIVCache, "SimpleProbe: Victim %#x, last_access_2 %llu, access_count %d \n", victim, last_access_time_2, access_count);
+
+
         assert(isTagPresent(victim));
         return victim;
     }

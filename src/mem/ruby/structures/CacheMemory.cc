@@ -192,6 +192,7 @@ CacheMemory::tryCacheAccess(Addr address, RubyRequestType type,
         // Do we even have a tag match?
         m_replacementPolicy_ptr->touch(entry->replacementData);
         entry->setLastAccess(curTick());
+        entry->addAccessRecord(curTick());
         data_ptr = &(entry->getDataBlk());
 
         if (entry->m_Permission == AccessPermission_Read_Write) {
@@ -217,6 +218,7 @@ CacheMemory::testCacheAccess(Addr address, RubyRequestType type,
         // Do we even have a tag match?
         m_replacementPolicy_ptr->touch(entry->replacementData);
         entry->setLastAccess(curTick());
+        entry->addAccessRecord(curTick());
         data_ptr = &(entry->getDataBlk());
 
         return entry->m_Permission != AccessPermission_NotPresent;
@@ -295,6 +297,7 @@ CacheMemory::allocate(Addr address, AbstractCacheEntry *entry)
             set[i]->setPosition(cacheSet, i);
             set[i]->replacementData = replacement_data[cacheSet][i];
             set[i]->setLastAccess(curTick());
+            set[i]->addAccessRecord(curTick());
 
             // Call reset function here to set initial value for different
             // replacement policies.
@@ -367,6 +370,7 @@ CacheMemory::setMRU(Addr address)
     if (entry != nullptr) {
         m_replacementPolicy_ptr->touch(entry->replacementData);
         entry->setLastAccess(curTick());
+        entry->addAccessRecord(curTick());
     }
 }
 
@@ -376,6 +380,7 @@ CacheMemory::setMRU(AbstractCacheEntry *entry)
     assert(entry != nullptr);
     m_replacementPolicy_ptr->touch(entry->replacementData);
     entry->setLastAccess(curTick());
+    entry->addAccessRecord(curTick());
 }
 
 void
@@ -394,6 +399,7 @@ CacheMemory::setMRU(Addr address, int occupancy)
             m_replacementPolicy_ptr->touch(entry->replacementData);
         }
         entry->setLastAccess(curTick());
+        entry->addAccessRecord(curTick());
     }
 }
 

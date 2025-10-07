@@ -64,6 +64,7 @@ class AbstractCacheEntry : public ReplaceableEntry
   private:
     // The last access tick for the cache entry.
     Tick m_last_touch_tick;
+    std::vector<Tick> m_access_record{};
 
   public:
     AbstractCacheEntry();
@@ -111,9 +112,12 @@ class AbstractCacheEntry : public ReplaceableEntry
 
     // Get the last access Tick.
     Tick getLastAccess() { return m_last_touch_tick; }
+    std::vector<Tick> getAccessRecord() { return m_access_record; }
 
     // Set the last access Tick.
     void setLastAccess(Tick tick) { m_last_touch_tick = tick; }
+    void addAccessRecord(Tick tick) { m_access_record.push_back(tick); }
+    void clearAccessRecord(Tick tick) { m_access_record.clear(); }
 
     // hardware transactional memory
     void setInHtmReadSet(bool val);
