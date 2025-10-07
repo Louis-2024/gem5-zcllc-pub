@@ -117,7 +117,6 @@ class AbstractCacheEntry : public ReplaceableEntry
     // Set the last access Tick.
     void setLastAccess(Tick tick) { m_last_touch_tick = tick; }
     void addAccessRecord(Tick tick) { m_access_record.push_back(tick); }
-    void clearAccessRecord(Tick tick) { m_access_record.clear(); }
 
     // hardware transactional memory
     void setInHtmReadSet(bool val);

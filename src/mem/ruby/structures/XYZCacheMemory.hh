@@ -67,6 +67,14 @@ public:
     virtual const AbstractCacheEntry* lookup(Addr address) const;
     virtual void init();
 
+    virtual int getSharerCount(Addr address) {
+        if(!m_ziv) return;
+        if(P.find(address) == P.end()) {
+            return 0;
+        } else{
+            return P[address];
+        }
+    }
     virtual void addSharer(Addr address) {
         if(!m_ziv) return;
         assert(isTagPresent(address));
@@ -223,18 +231,7 @@ public:
 
         
         Addr victim = *Q.begin();
-        auto entry = lookup(address);
-        Tick last_access_time_1 = 0;
-        Tick last_access_time_2 = 0;
-        int access_count = 0;
-        if(entry) {
-            last_access_time_1 = entry->getLastAccess();
-            last_access_time_2 = entry->getAccessRecord().back();
-            access_count = entry->getAccessRecord().size();
-        }
-        DPRINTF(ZIVCache, "XYZCacheProbe: Victim %#x, last_access_1 %llu \n", victim, last_access_time_1);
-        DPRINTF(ZIVCache, "XYZCacheProbe: Victim %#x, last_access_2 %llu, access_count %d \n", victim, last_access_time_2, access_count);
-
+        
 
         assert(isTagPresent(victim));
         return victim;
@@ -245,17 +242,6 @@ public:
 
 
         Addr victim = *Q.begin();
-        auto entry = lookup(address);
-        Tick last_access_time_1 = 0;
-        Tick last_access_time_2 = 0;
-        int access_count = 0;
-        if(entry) {
-            last_access_time_1 = entry->getLastAccess();
-            last_access_time_2 = entry->getAccessRecord().back();
-            access_count = entry->getAccessRecord().size();
-        }
-        DPRINTF(ZIVCache, "SimpleProbe: Victim %#x, last_access_1 %llu \n", victim, last_access_time_1);
-        DPRINTF(ZIVCache, "SimpleProbe: Victim %#x, last_access_2 %llu, access_count %d \n", victim, last_access_time_2, access_count);
 
 
         assert(isTagPresent(victim));
