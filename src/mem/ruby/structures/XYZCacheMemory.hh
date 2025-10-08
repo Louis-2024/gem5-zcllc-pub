@@ -6,6 +6,7 @@
 #include <unordered_set>
 #include <map>
 #include <vector>
+#include <utility>
 #include "debug/ZIVCache.hh"
 
 #include "base/statistics.hh"
@@ -67,14 +68,6 @@ public:
     virtual const AbstractCacheEntry* lookup(Addr address) const;
     virtual void init();
 
-    virtual int getSharerCount(Addr address) {
-        if(!m_ziv) return;
-        if(P.find(address) == P.end()) {
-            return 0;
-        } else{
-            return P[address];
-        }
-    }
     virtual void addSharer(Addr address) {
         if(!m_ziv) return;
         assert(isTagPresent(address));
@@ -84,6 +77,7 @@ public:
         }
         if(P.find(address) == P.end()) P[address] = 0;
         P[address] += 1;
+        sharers_records[address].push_back({curTick(), P[address]});
         totalPrivateCache += 1;
         markEntryNotCRE(address);
         reportInvariant(address);
@@ -110,6 +104,7 @@ public:
             P[address] = 0;
         }
         P[address] = 1;
+        sharers_records[address].push_back({curTick(), 1});
         totalPrivateCache += 1;
 
         markEntryNotCRE(address);
@@ -127,6 +122,7 @@ public:
             Q.insert(address);
             P.erase(it);
         }
+        sharers_records[address].push_back({curTick(), it->second});
         totalPrivateCache -= 1;
         reportInvariant(address);
     }
@@ -139,6 +135,7 @@ public:
         totalPrivateCache -= it->second;
         P.erase(it);
         Q.insert(address);
+        sharers_records[address].push_back({curTick(), 0});
         reportInvariant(address);
     }
     // must be called afterwards
@@ -150,6 +147,7 @@ public:
         assert(Q.find(address) != Q.end());
         assert(P.find(address) == P.end());
         Q.erase(address);
+        sharers_records.erase(address);
         auto e = lookup(address);
         auto row = e->getSet();
         auto way = e->getWay();
@@ -231,6 +229,12 @@ public:
 
         
         Addr victim = *Q.begin();
+
+        DPRINTF(ZIVCache, "XYZCacheProbe: victim %#x, sharers_records contains %d entries \n", victim, sharers_records.size());
+        auto& victim_records = sharers_records[victim];
+        for (auto& [tick, count] : victim_records) {
+             DPRINTF(ZIVCache, "XYZCacheProbe: Starting %llu, victim has %d sharers \n", tick, count);
+        }
         
 
         assert(isTagPresent(victim));
@@ -242,6 +246,12 @@ public:
 
 
         Addr victim = *Q.begin();
+
+        DPRINTF(ZIVCache, "SimpleProbe: victim %#x, sharers_records contains %d entries \n", victim, sharers_records.size());
+        auto& victim_records = sharers_records[victim];
+        for (auto& [tick, count] : victim_records) {
+             DPRINTF(ZIVCache, "SimpleProbe: Starting %llu, victim has %d sharers \n", tick, count);
+        }
 
 
         assert(isTagPresent(victim));
@@ -263,6 +273,8 @@ protected:
     // Store the number of sharers for cache lines cached
     std::unordered_map<Addr, int> P; // the P set for maintaining P
     std::unordered_set<Addr> Q; // the lines that are dirty but not privately cached
+
+    std::unordered_map<Addr, std::vector<std::pair<Tick, int>>> sharers_records;
 
     std::vector<int> CRECountPerSet; // The number of CRE per set, initialized to be all zeros
     std::vector<std::vector<bool>> isCRE;
