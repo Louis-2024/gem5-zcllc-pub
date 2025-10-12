@@ -12,6 +12,7 @@
 #include "base/statistics.hh"
 #include "mem/cache/replacement_policies/base.hh"
 #include "mem/cache/replacement_policies/replaceable_entry.hh"
+#include "mem/ruby/common/AccessRecordsList.hh"
 #include "mem/ruby/common/DataBlock.hh"
 #include "mem/ruby/protocol/CacheRequestType.hh"
 #include "mem/ruby/protocol/CacheResourceType.hh"
@@ -68,16 +69,26 @@ public:
     virtual const AbstractCacheEntry* lookup(Addr address) const;
     virtual void init();
 
+    void addToQ(Addr address) {
+        Q.insert(address);
+        addQAccessRecordsByAddr(address);
+    }
+
+    void removeFromQ(Addr address) {
+        Q.erase(address);
+        removeQAccessRecordsByAddr(address);
+    }
+
     virtual void addSharer(Addr address) {
         if(!m_ziv) return;
         assert(isTagPresent(address));
         if(Q.find(address) != Q.end()) {
-            Q.erase(address);
+            removeFromQ(address);
             assert(P.find(address) == P.end());
         }
         if(P.find(address) == P.end()) P[address] = 0;
         P[address] += 1;
-        sharers_records[address].push_back({curTick(), P[address]});
+        addSharerRecords(address, curTick(), P[address]);
         totalPrivateCache += 1;
         markEntryNotCRE(address);
         reportInvariant(address);
@@ -96,7 +107,7 @@ public:
         if(!m_ziv) return;
         assert(isTagPresent(address));
         if(Q.find(address) != Q.end()) {
-            Q.erase(address);
+            removeFromQ(address);
             assert(P.find(address) == P.end());
         }
         if(P.find(address) != P.end()) {
@@ -104,7 +115,7 @@ public:
             P[address] = 0;
         }
         P[address] = 1;
-        sharers_records[address].push_back({curTick(), 1});
+        addSharerRecords(address, curTick(), 1);
         totalPrivateCache += 1;
 
         markEntryNotCRE(address);
@@ -119,10 +130,10 @@ public:
         assert(it->second > 0);
         it->second--;
         if(it->second == 0) {
-            Q.insert(address);
+            addToQ(address);
             P.erase(it);
         }
-        sharers_records[address].push_back({curTick(), it->second});
+        addSharerRecords(address, curTick(), it->second);
         totalPrivateCache -= 1;
         reportInvariant(address);
     }
@@ -134,8 +145,8 @@ public:
         assert(Q.find(address) == Q.end());
         totalPrivateCache -= it->second;
         P.erase(it);
-        Q.insert(address);
-        sharers_records[address].push_back({curTick(), 0});
+        addToQ(address);
+        addSharerRecords(address, curTick(), 0);
         reportInvariant(address);
     }
     // must be called afterwards
@@ -146,8 +157,8 @@ public:
         assert(isTagPresent(address));
         assert(Q.find(address) != Q.end());
         assert(P.find(address) == P.end());
-        Q.erase(address);
-        sharers_records.erase(address);
+        removeFromQ(address);
+        removeSharerRecordsByAddr(address);
         auto e = lookup(address);
         auto row = e->getSet();
         auto way = e->getWay();
@@ -217,26 +228,84 @@ public:
         return m_cache[cacheSet][m_replacementPolicy_ptr->
                             getVictim(candidates)->getWay()];
     }
+
+    // functions to track access records by address
+    std::vector<Tick> getAccessRecordsByAddr(Addr address) {
+        auto entry = lookup(address);
+        if(entry) {
+            return entry->getAccessRecord();
+        } else {
+            return std::vector<Tick>();
+        }
+    }
+    
+    // functions to track sharer records by address
+    std::vector<std::pair<Tick, int>> getSharerRecordsByAddr (Addr address) {
+        auto sharers = sharers_records.find(address);
+        if (sharers != sharers_records.end()) {
+            return sharers->second;
+        } else {
+            return  std::vector<std::pair<Tick, int>>();
+        }
+    }
+    void addSharerRecords (Addr address, Tick tick, int num_sharers) {
+        sharers_records[address].push_back({tick, num_sharers});
+    }
+    void removeSharerRecordsByAddr (Addr address) {
+        sharers_records.erase(address);
+    }
+
+    // functions to track access records of all Q lines
+    AccessRecordsList<Addr, Tick> getQAccessRecords() {
+        return Q_access_records;
+    }
+    void addQAccessRecordsByAddr (Addr address) {
+        std::vector<Tick> records = getAccessRecordsByAddr(address);
+        for (const Tick& tick : records) {
+            Q_access_records.insert(address, tick);
+        }
+    }
+    void removeQAccessRecordsByAddr (Addr address) {
+        Q_access_records.erase(address);
+    }
+
+    // functions to select Q victim for CRE
     Addr xyzCacheProbe(Addr address) {
-        
-        // Just probe arbitrary line so that we can create a CRE
         if(!m_ziv) return cacheProbe(address);
-        // probe an address, but we must assume there is no CRE
         assert(!xyzCREAvail(address));
-        // We now needs to select a cache line from Q
-        // TODO: use a more intelligent replacement policy
         assert(Q.size() > 0);
 
-        
         Addr victim = *Q.begin();
+        //
 
-        DPRINTF(ZIVCache, "XYZCacheProbe: victim %#x, sharers_records contains %d entries \n", victim, sharers_records.size());
-        auto& victim_records = sharers_records[victim];
-        for (auto& [tick, count] : victim_records) {
-             DPRINTF(ZIVCache, "XYZCacheProbe: Starting %llu, victim has %d sharers \n", tick, count);
-        }
         
 
+        int records_count_1 = 0;
+        for (const Addr& Q_address : Q) {
+            records_count_1 += getAccessRecordsByAddr(Q_address).size();
+        }
+        int records_count_2 = getQAccessRecords().size();
+        DPRINTF(ZIVCache, "records_count_1 = %d, records_count_2 = %d \n", records_count_1, records_count_2);
+        if(records_count_1 != records_count_2) {
+            DPRINTF(ZIVCache, "Warning: Discrepancy in element counts! \n");
+        }
+
+        bool non_decreasing_order = true;
+        auto it = Q_access_records.begin();
+        Tick prev_tick = it->tick;
+        it++;
+        for (; it != Q_access_records.end(); it++) {
+            if ((it->tick) < prev_tick) {
+                non_decreasing_order = false;
+            }
+            prev_tick = it->tick;
+        }
+        if (!non_decreasing_order) {
+            DPRINTF(ZIVCache, "Warning: Discrepancy in element order! \n");
+        }
+
+
+        
         assert(isTagPresent(victim));
         return victim;
     }
@@ -244,19 +313,41 @@ public:
         if(!m_ziv) return cacheProbe(address);
         assert(Q.size() > 0);
 
-
         Addr victim = *Q.begin();
+        //
 
-        DPRINTF(ZIVCache, "SimpleProbe: victim %#x, sharers_records contains %d entries \n", victim, sharers_records.size());
-        auto& victim_records = sharers_records[victim];
-        for (auto& [tick, count] : victim_records) {
-             DPRINTF(ZIVCache, "SimpleProbe: Starting %llu, victim has %d sharers \n", tick, count);
+
+
+        int records_count_1 = 0;
+        for (const Addr& Q_address : Q) {
+            records_count_1 += getAccessRecordsByAddr(Q_address).size();
         }
+        int records_count_2 = getQAccessRecords().size();
+        DPRINTF(ZIVCache, "records_count_1 = %d, records_count_2 = %d \n", records_count_1, records_count_2);
+        if(records_count_1 != records_count_2) {
+            DPRINTF(ZIVCache, "Warning: Discrepancy in element counts! \n");
+        }
+
+        bool non_decreasing_order = true;
+        auto it = Q_access_records.begin();
+        Tick prev_tick = it->tick;
+        it++;
+        for (; it != Q_access_records.end(); it++) {
+            if ((it->tick) < prev_tick) {
+                non_decreasing_order = false;
+            }
+            prev_tick = it->tick;
+        }
+        if (!non_decreasing_order) {
+            DPRINTF(ZIVCache, "Warning: Discrepancy in element order! \n");
+        }
+
 
 
         assert(isTagPresent(victim));
         return victim;
     }
+
     bool vi_enabled() const {
         return m_use_vi;
     }
@@ -275,6 +366,7 @@ protected:
     std::unordered_set<Addr> Q; // the lines that are dirty but not privately cached
 
     std::unordered_map<Addr, std::vector<std::pair<Tick, int>>> sharers_records;
+    AccessRecordsList<Addr, Tick> Q_access_records;
 
     std::vector<int> CRECountPerSet; // The number of CRE per set, initialized to be all zeros
     std::vector<std::vector<bool>> isCRE;

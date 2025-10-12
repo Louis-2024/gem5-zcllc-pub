@@ -81,6 +81,7 @@ MakeInclude('slicc_interface/Message.hh')
 MakeInclude('slicc_interface/RubyRequest.hh')
 
 # External types
+MakeInclude('common/AccessRecordsList.hh')
 MakeInclude('common/Address.hh')
 MakeInclude('common/BoolVec.hh')
 MakeInclude('common/DataBlock.hh')
