@@ -241,18 +241,18 @@ public:
     
     // functions to track sharer records by address
     std::vector<std::pair<Tick, int>> getSharerRecordsByAddr (Addr address) {
-        auto sharers = sharers_records.find(address);
-        if (sharers != sharers_records.end()) {
+        auto sharers = Q_sharer_records.find(address);
+        if (sharers != Q_sharer_records.end()) {
             return sharers->second;
         } else {
             return  std::vector<std::pair<Tick, int>>();
         }
     }
     void addSharerRecords (Addr address, Tick tick, int num_sharers) {
-        sharers_records[address].push_back({tick, num_sharers});
+        Q_sharer_records[address].push_back({tick, num_sharers});
     }
     void removeSharerRecordsByAddr (Addr address) {
-        sharers_records.erase(address);
+        Q_sharer_records.erase(address);
     }
 
     // functions to track access records of all Q lines
@@ -269,6 +269,17 @@ public:
         Q_access_records.erase(address);
     }
 
+    // function to track access index by address
+    std::unordered_map<Addr, std::vector<int>> getQAccessIndices () {
+        std::unordered_map<Addr, std::vector<int>> Q_access_indices;
+        int index = (int) (Q_access_records.size() - 1);
+        for (const auto& record : Q_access_records) {
+            Q_access_indices[record.addr].push_back(index);
+            index -= 1;
+        }
+        return Q_access_indices;
+    }
+
     // functions to select Q victim for CRE
     Addr xyzCacheProbe(Addr address) {
         if(!m_ziv) return cacheProbe(address);
@@ -277,34 +288,6 @@ public:
 
         Addr victim = *Q.begin();
         //
-
-        
-
-        int records_count_1 = 0;
-        for (const Addr& Q_address : Q) {
-            records_count_1 += getAccessRecordsByAddr(Q_address).size();
-        }
-        int records_count_2 = getQAccessRecords().size();
-        DPRINTF(ZIVCache, "records_count_1 = %d, records_count_2 = %d \n", records_count_1, records_count_2);
-        if(records_count_1 != records_count_2) {
-            DPRINTF(ZIVCache, "Warning: Discrepancy in element counts! \n");
-        }
-
-        bool non_decreasing_order = true;
-        auto it = Q_access_records.begin();
-        Tick prev_tick = it->tick;
-        it++;
-        for (; it != Q_access_records.end(); it++) {
-            if ((it->tick) < prev_tick) {
-                non_decreasing_order = false;
-            }
-            prev_tick = it->tick;
-        }
-        if (!non_decreasing_order) {
-            DPRINTF(ZIVCache, "Warning: Discrepancy in element order! \n");
-        }
-
-
         
         assert(isTagPresent(victim));
         return victim;
@@ -315,34 +298,6 @@ public:
 
         Addr victim = *Q.begin();
         //
-
-
-
-        int records_count_1 = 0;
-        for (const Addr& Q_address : Q) {
-            records_count_1 += getAccessRecordsByAddr(Q_address).size();
-        }
-        int records_count_2 = getQAccessRecords().size();
-        DPRINTF(ZIVCache, "records_count_1 = %d, records_count_2 = %d \n", records_count_1, records_count_2);
-        if(records_count_1 != records_count_2) {
-            DPRINTF(ZIVCache, "Warning: Discrepancy in element counts! \n");
-        }
-
-        bool non_decreasing_order = true;
-        auto it = Q_access_records.begin();
-        Tick prev_tick = it->tick;
-        it++;
-        for (; it != Q_access_records.end(); it++) {
-            if ((it->tick) < prev_tick) {
-                non_decreasing_order = false;
-            }
-            prev_tick = it->tick;
-        }
-        if (!non_decreasing_order) {
-            DPRINTF(ZIVCache, "Warning: Discrepancy in element order! \n");
-        }
-
-
 
         assert(isTagPresent(victim));
         return victim;
@@ -365,7 +320,7 @@ protected:
     std::unordered_map<Addr, int> P; // the P set for maintaining P
     std::unordered_set<Addr> Q; // the lines that are dirty but not privately cached
 
-    std::unordered_map<Addr, std::vector<std::pair<Tick, int>>> sharers_records;
+    std::unordered_map<Addr, std::vector<std::pair<Tick, int>>> Q_sharer_records;
     AccessRecordsList<Addr, Tick> Q_access_records;
 
     std::vector<int> CRECountPerSet; // The number of CRE per set, initialized to be all zeros
