@@ -26,12 +26,14 @@
 #include "params/XYZCache.hh"
 #include "sim/sim_object.hh"
 
-#define SHORT_DISTANCE_ACCESS 0b0001
-#define MID_DISTANCE_ACCESS 0b0010
-#define LONG_DISTANCE_ACCESS 0b0100
 
 #define RVQ_SIZE 2048
-#define TIME_BIN_SIZE 512
+
+#define SDA_BIN_SIZE 256
+#define MDA_BIN_SIZE 512
+#define LDA_BIN_SIZE 1024
+
+#define BASE_PRIORITY 12
 
 namespace gem5 {
 
@@ -77,13 +79,74 @@ public:
     virtual void init();
 
     uint16_t calculate_pattern(Addr address) {
-        // implement maths to calculate pattern
-        return 1;
+        uint16_t pattern = 0;
+        std::unordered_map<Addr, std::vector<int>> indices = getQAccessIndices();
+
+        int SDA_counter = 0;
+        int MDA_counter = 0;
+        int LDA_counter = 0;
+
+        auto pair_for_address = indices.find(address);
+        if (pair_for_address != indices.end()) {
+            const auto& indices_for_address = pair_for_address->second;
+            for (int index : indices_for_address) {
+                if ((0 <= index) && (index < SDA_BIN_SIZE)) {
+                    SDA_counter = SDA_counter + 1;
+                } else if ((SDA_BIN_SIZE <= index) && (index < (SDA_BIN_SIZE + MDA_BIN_SIZE))) {
+                    MDA_counter = MDA_counter + 1;
+                } else if (((SDA_BIN_SIZE + MDA_BIN_SIZE) <= index) && (index < (SDA_BIN_SIZE + MDA_BIN_SIZE + LDA_BIN_SIZE))) {
+                    LDA_counter = LDA_counter + 1;
+                }
+            }
+        } else {
+            assert(false);
+        }
+
+        if (SDA_counter > 0) {
+            pattern = pattern | 0b00000001;
+            if (SDA_counter > 3) {
+                pattern = pattern | 0b00000010;
+            }
+        }
+        if (MDA_counter > 0) {
+            pattern = pattern | 0b00000100;
+            if (MDA_counter > 3) {
+                pattern = pattern | 0b00001000;
+            }
+        }
+        if (LDA_counter > 0) {
+            pattern = pattern | 0b00010000;
+            if (LDA_counter > 3) {
+                pattern = pattern | 0b00100000;
+            }
+        }
+        return pattern;
     }
 
-    int calculate_priority(Addr address) {
-        // implement maths to calculate priority
-        return 1;
+    uint16_t calculate_priority(Addr address) {
+        uint16_t pattern = Q_patterns[address];
+        float priority = BASE_PRIORITY;
+        if (pattern & 0b00000001) {
+            priority = priority + 3;
+        }
+        if (pattern & 0b00000010) {
+            priority = priority + 3;
+        }
+        if (pattern & 0b00000100) {
+            priority = priority + 2;
+        }
+        if (pattern & 0b00001000) {
+            priority = priority + 2;
+        }
+        if (pattern & 0b00010000) {
+            priority = priority + 1;
+        }
+        if (pattern & 0b00100000) {
+            priority = priority + 1;
+        }
+
+        DPRINTF(ZIVCache, "Address: %#x; Priority: %d \n", address, priority);
+        return static_cast<int>(std::lround(priority));
     }
 
     void addToQ(Addr address) {
@@ -358,8 +421,8 @@ public:
                 victim_tick = getLastAccessByAddr(addr);
             }
         }
-        
-        
+
+
         assert(isTagPresent(victim));
         return victim;
     }
