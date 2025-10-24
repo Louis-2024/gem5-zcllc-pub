@@ -31,13 +31,15 @@ class SyntheticBenchmark
 
   private:
     void addCheck(Addr address);
-
+    
     // Private copy constructor and assignment operator
     SyntheticBenchmark(const SyntheticBenchmark& obj);
     SyntheticBenchmark& operator=(const SyntheticBenchmark& obj);
 
     std::vector<Check*> m_check_vector;
     std::unordered_map<Addr, Check*> m_lookup_map;
+
+    uint32_t m_current_index = 0;
 
     int m_num_writers;
     int m_num_readers;
