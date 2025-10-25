@@ -128,7 +128,7 @@ RubyTester::init()
     m_num_readers = readPorts.size();
     assert(m_num_readers == m_num_cpus);
 
-    m_checkTable_ptr = new CheckTable(m_num_writers, m_num_readers, this);
+    m_checkTable_ptr = new SyntheticBenchmark(m_num_writers, m_num_readers, this);
 }
 
 Port &

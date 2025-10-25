@@ -67,9 +67,9 @@ system.mem_ranges = [AddrRange('4GB')] # Create an address range
 if not args.ruby_test:
     system.cpu = [TimingSimpleCPU() for i in range(args.ncore)]
 else:
-    system.tester = WCLRubyTester(checks_to_complete = args.nreq,
-                           wakeup_frequency = args.wakeup_frequency,
-                           num_cpus = args.ncore, deadlock_threshold=50000)
+    system.tester = RubyTester(checks_to_complete = args.nreq,
+                        wakeup_frequency = args.wakeup_frequency,
+                        num_cpus = args.ncore, deadlock_threshold=50000)
 # 12999808000 - 50000000
 # 12438272000 - 50000
 # 66000048000 - 100000000
