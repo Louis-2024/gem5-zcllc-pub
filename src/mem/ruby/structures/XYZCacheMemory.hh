@@ -25,6 +25,7 @@
 // #include "params/RubyCache.hh"
 #include "params/XYZCache.hh"
 #include "sim/sim_object.hh"
+#include "base/random.hh"
 
 #define RVQ_SIZE 1536
 #define ACCESS_BIN_SIZE 512
@@ -432,8 +433,9 @@ public:
                 victim = victim_candidate;
                 break;
             } else if (priority <= 8) {
-                double probability = std::exp(-static_cast<double>(priority) * std::log(static_cast<double>(PROBABILITY_COEFFICIENT)));
-                if (probability > static_cast<double>(std::rand()) / static_cast<double>(RAND_MAX + 1)){
+                float probability = std::exp(-static_cast<float>(priority) * std::log(static_cast<float>(PROBABILITY_COEFFICIENT)));
+                float random_between_0_and_1 = random_mt.random<float>();
+                if (probability > random_between_0_and_1){
                     victim = victim_candidate;
                     break;
                 }
@@ -464,6 +466,7 @@ public:
         // step 3: find the victim using 1) last access time 2) priority
         Addr victim = getLRUFromQ();
 
+        DPRINTF(ZIVCache, "victim: %#x, priority: %d \n", victim, Q_priority[victim]);
 
         assert(isTagPresent(victim));
         return victim;
@@ -487,6 +490,7 @@ public:
         // step 3: find the victim using 1) last access time 2) priority
         Addr victim = getLRUFromQ();
 
+        DPRINTF(ZIVCache, "victim: %#x, priority: %d \n", victim, Q_priority[victim]);
 
         assert(isTagPresent(victim));
         return victim;
