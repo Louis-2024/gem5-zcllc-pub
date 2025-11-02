@@ -110,6 +110,7 @@ XYZCacheMemory::allocate(Addr address, AbstractCacheEntry *entry)
     assert(isCRE[new_entry->getSet()][new_entry->getWay()]);
     // CRECountPerSet[new_entry->getSet()] -= 1;
     // CRETotal -= 1;
+    checkRVQ(address);
     return new_entry;
 }
 void XYZCacheMemory::deallocate(Addr address) {

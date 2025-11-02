@@ -28,6 +28,7 @@
 #include "base/random.hh"
 
 #define RVQ_SIZE 1536
+#define RVQ_REUSE_COUNTER_MAX 127
 #define ACCESS_BIN_SIZE 512
 #define BASE_PRIORITY 4
 #define PROBABILITY_COEFFICIENT 1.5
@@ -75,7 +76,7 @@ public:
     virtual const AbstractCacheEntry* lookup(Addr address) const;
     virtual void init();
 
-    uint16_t calculate_pattern(Addr address) {
+    uint16_t calculatePattern(Addr address) {
         uint16_t pattern = 0;
         std::unordered_map<Addr, std::vector<int>> indices = getQAccessIndices();
 
@@ -123,41 +124,46 @@ public:
         if (XLDA_counter > 0) {
             pattern = pattern | 0b01000000;
             if (XLDA_counter > 3) {
-                pattern = pattern | 0b100000000;
+                pattern = pattern | 0b10000000;
             }
         }
         return pattern;
     }
 
-    uint16_t calculate_priority(Addr address) {
+    float calculatePriority(Addr address) {
         uint16_t pattern = Q_patterns[address];
         float priority = BASE_PRIORITY;
         if (pattern & 0b00000001) {
-            priority = priority + 14;
+            priority = priority + 14 * calculateMultiplier(0);
         }
         if (pattern & 0b00000010) {
-            priority = priority + 7;
+            priority = priority + 7 * calculateMultiplier(1);
         }
         if (pattern & 0b00000100) {
-            priority = priority + 10;
+            priority = priority + 10 * calculateMultiplier(2);
         }
         if (pattern & 0b00001000) {
-            priority = priority + 5;
+            priority = priority + 5 * calculateMultiplier(3);
         }
         if (pattern & 0b00010000) {
-            priority = priority + 6;
+            priority = priority + 6 * calculateMultiplier(4);
         }
         if (pattern & 0b00100000) {
-            priority = priority + 3;
+            priority = priority + 3 * calculateMultiplier(5);
         }
         if (pattern & 0b01000000) {
-            priority = priority + 2;
+            priority = priority + 2 * calculateMultiplier(6);
         }
         if (pattern & 0b10000000) {
-            priority = priority + 1;
+            priority = priority + 1 * calculateMultiplier(7);
+        }
+
+        for (int i = 0; i < Q_RVQ_reuse_counter.size(); i++) {
+            DPRINTF(ZIVCache, "Reuse counter at %d: %d \n", i, Q_RVQ_reuse_counter[i]);
+            DPRINTF(ZIVCache, "Reuse score at %d: %f \n", i, calculateMultiplier(i));
         }
         
-        return static_cast<int>(std::lround(priority));
+        return priority;
     }
 
     void addToQ(Addr address) {
@@ -165,8 +171,8 @@ public:
 
         Q.insert(address);
         addQAccessRecordsByAddr(address);
-        Q_patterns[address] = calculate_pattern(address);
-        Q_priority[address] = calculate_priority(address);
+        Q_patterns[address] = calculatePattern(address);
+        Q_priority[address] = calculatePriority(address);
     }
 
     void removeFromQ(Addr address) {
@@ -181,9 +187,9 @@ public:
     void removeFromQAsVictim(Addr address) {
         assert(Q.find(address) != Q.end());
 
-        Q_RVQ.push_back({address, Q_patterns[address]});
+        Q_RVQ.push_front({address, Q_patterns[address]});
         if (Q_RVQ.size() > RVQ_SIZE) {
-            Q_RVQ.pop_front();
+            Q_RVQ.pop_back();
         }
 
         Q.erase(address);
@@ -427,13 +433,13 @@ public:
         Addr victim = 0;
         while (Q_last_access_records.size() > 0) {
             Addr victim_candidate = Q_last_access_records.back();
-            uint16_t priority = Q_priority[victim_candidate];
+            float priority = Q_priority[victim_candidate];
             // probability of being chosen as victim = PROBABILITY_COEFFICIENT ^ (-priority)
             if (priority == 0) {
                 victim = victim_candidate;
                 break;
             } else if (priority <= 8) {
-                float probability = std::exp(-static_cast<float>(priority) * std::log(static_cast<float>(PROBABILITY_COEFFICIENT)));
+                float probability = std::exp(-priority * std::log(static_cast<float>(PROBABILITY_COEFFICIENT)));
                 float random_between_0_and_1 = random_mt.random<float>();
                 if (probability > random_between_0_and_1){
                     victim = victim_candidate;
@@ -445,15 +451,63 @@ public:
         return victim;
     }
 
+    // function to check RVQ when a new line is fetched
+    void checkRVQ(Addr address) {
+        bool update_flag = false;
+        for (const auto& pair : Q_RVQ) {
+            if (pair.first == address) {
+                DPRINTF(ZIVCache, "RVQ reuse: %#x \n", address);
+                update_flag = true;
+                bool decrement_flag = false;
+                for (int bit = 0; bit < Q_RVQ_reuse_counter.size(); bit++) {
+                    if (pair.second & (1u << bit)) {
+                        Q_RVQ_reuse_counter[bit] += 1;
+                        if (Q_RVQ_reuse_counter[bit] > RVQ_REUSE_COUNTER_MAX) {
+                            decrement_flag = true;
+                        }
+                    }
+                }
+                if (decrement_flag) {
+                    for (int i = 0; i < Q_RVQ_reuse_counter.size(); i++) {
+                        Q_RVQ_reuse_counter[i] = Q_RVQ_reuse_counter[i] / 2;
+                    }
+                }
+                break;
+            }
+        }
+        if (update_flag) {
+            std::array<uint16_t, 8> Q_RVQ_all_pattern_counter{0, 0, 0, 0, 0, 0, 0, 0};
+            for (const auto& pair : Q_RVQ) {
+                for (int bit = 0; bit < Q_RVQ_all_pattern_counter.size(); bit++) {
+                    if (pair.second & (1u << bit)) {
+                        Q_RVQ_all_pattern_counter[bit] += 1;
+                    }
+                }
+            }
+            for (int i = 0; i < Q_RVQ_reuse_counter.size(); i++) {
+                Q_RVQ_reuse_score[i] = (Q_RVQ_all_pattern_counter[i] > 0) ? (static_cast<float>(Q_RVQ_reuse_counter[i]) / Q_RVQ_all_pattern_counter[i]) : 0;
+            }
+        }
+    }
+
+    // function to compute multiplier
+    float calculateMultiplier(int index) {
+        float total_weight = 0;
+        for (int i = 0; i < Q_RVQ_reuse_score.size(); i++) {
+            total_weight += Q_RVQ_reuse_score[i];
+        }
+        assert(total_weight > 0);
+        return (Q_RVQ_reuse_score.size() * Q_RVQ_reuse_score[index] / total_weight);
+    }
+
     // functions to select Q victim for CRE
     Addr xyzCacheProbe(Addr address) {
         if(!m_ziv) return cacheProbe(address);
         assert(!xyzCREAvail(address));
         assert(Q.size() > 0);
         
-        
         // step 1: find the min priority
-        uint16_t min_priority = UINT16_MAX;
+        float min_priority = INT16_MAX;
         for (const Addr& addr : Q) {
             if (Q_priority[addr] < min_priority) {
                 min_priority = Q_priority[addr];
@@ -466,7 +520,7 @@ public:
         // step 3: find the victim using 1) last access time 2) priority
         Addr victim = getLRUFromQ();
 
-        DPRINTF(ZIVCache, "victim: %#x, priority: %d \n", victim, Q_priority[victim]);
+        DPRINTF(ZIVCache, "victim: %#x, priority: %f \n", victim, Q_priority[victim]);
 
         assert(isTagPresent(victim));
         return victim;
@@ -475,9 +529,8 @@ public:
         if(!m_ziv) return cacheProbe(address);
         assert(Q.size() > 0);
 
-
         // step 1: find the min priority
-        uint16_t min_priority = UINT16_MAX;
+        float min_priority = INT16_MAX;
         for (const Addr& addr : Q) {
             if (Q_priority[addr] < min_priority) {
                 min_priority = Q_priority[addr];
@@ -490,7 +543,7 @@ public:
         // step 3: find the victim using 1) last access time 2) priority
         Addr victim = getLRUFromQ();
 
-        DPRINTF(ZIVCache, "victim: %#x, priority: %d \n", victim, Q_priority[victim]);
+        DPRINTF(ZIVCache, "victim: %#x, priority: %f \n", victim, Q_priority[victim]);
 
         assert(isTagPresent(victim));
         return victim;
@@ -514,10 +567,11 @@ protected:
     
     std::unordered_set<Addr> Q; // the lines that are dirty but not privately cached
     std::unordered_map<Addr, std::uint16_t> Q_patterns; // second: access pattern index
-    std::unordered_map<Addr, std::uint16_t> Q_priority; // second: priority index
+    std::unordered_map<Addr, float> Q_priority; // second: priority index
 
     std::deque<std::pair<Addr, std::uint16_t>> Q_RVQ; // list of recent Q victims, max size = RVQ_SIZE
-    std::array<uint16_t, 4> Q_RVQ_reuse_counter; // [0]: SDA; [1]: MDA; [2]: LDA; [3]: XLDA
+    std::array<uint16_t, 8> Q_RVQ_reuse_counter{1, 1, 1, 1, 1, 1, 1, 1}; // [0]: SDA-1; [1]: SDA-1+; [2]: MDA-1+; [3]: MDA-1+; [4]: LDA-1; [5]: LDA-1+; [6]: XLDA-1; [7]: XLDA-1+
+    std::array<float, 8> Q_RVQ_reuse_score{0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01}; // weighted count
 
     AccessRecordsList<Addr, Tick> Q_access_records;
     std::unordered_map<Addr, std::vector<std::pair<Tick, int>>> Q_sharer_records;
