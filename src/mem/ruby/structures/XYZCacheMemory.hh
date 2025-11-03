@@ -28,10 +28,26 @@
 #include "base/random.hh"
 
 #define RVQ_SIZE 1536
-#define RVQ_REUSE_COUNTER_MAX 127
-#define ACCESS_BIN_SIZE 512
+#define RVQ_COUNTER_MAX 511
+#define RVQ_REUSE_COUNTER_MAX 511
+
 #define BASE_PRIORITY 4
+#define PRIORITY_MULTIPLIER_SDA 16
+#define PRIORITY_MULTIPLIER_SDA_FREQ 8
+#define PRIORITY_MULTIPLIER_MDA 12
+#define PRIORITY_MULTIPLIER_MDA_FREQ 6
+#define PRIORITY_MULTIPLIER_LDA 8
+#define PRIORITY_MULTIPLIER_LDA_FREQ 4
+#define PRIORITY_MULTIPLIER_XLDA 4
+#define PRIORITY_MULTIPLIER_XLDA_FREQ 2
+
+#define ACCESS_BIN_SIZE_1 16
+#define ACCESS_BIN_SIZE_2 64
+#define ACCESS_BIN_SIZE_3 256
+#define ACCESS_BIN_SIZE_4 1024
+
 #define PROBABILITY_COEFFICIENT 1.5
+#define FREQUENT_ACCESS_THRESHOLD 3
 
 namespace gem5 {
 
@@ -89,13 +105,13 @@ public:
         if (pair_for_address != indices.end()) {
             const auto& indices_for_address = pair_for_address->second;
             for (int index : indices_for_address) {
-                if ((0 <= index) && (index < ACCESS_BIN_SIZE)) {
+                if ((0 <= index) && (index < ACCESS_BIN_SIZE_1)) {
                     SDA_counter = SDA_counter + 1;
-                } else if ((ACCESS_BIN_SIZE <= index) && (index < 2 * ACCESS_BIN_SIZE)) {
+                } else if ((ACCESS_BIN_SIZE_1 <= index) && (index < (ACCESS_BIN_SIZE_1 + ACCESS_BIN_SIZE_2))) {
                     MDA_counter = MDA_counter + 1;
-                } else if ((2 * ACCESS_BIN_SIZE <= index) && (index < 3 * ACCESS_BIN_SIZE)) {
+                } else if (((ACCESS_BIN_SIZE_1 + ACCESS_BIN_SIZE_2) <= index) && (index < (ACCESS_BIN_SIZE_1 + ACCESS_BIN_SIZE_2 + ACCESS_BIN_SIZE_3))) {
                     LDA_counter = LDA_counter + 1;
-                } else if ((3 * ACCESS_BIN_SIZE <= index) && (index < 4 * ACCESS_BIN_SIZE)) {
+                } else if (((ACCESS_BIN_SIZE_1 + ACCESS_BIN_SIZE_2 + ACCESS_BIN_SIZE_3) <= index) && (index < (ACCESS_BIN_SIZE_1 + ACCESS_BIN_SIZE_2 + ACCESS_BIN_SIZE_3 + ACCESS_BIN_SIZE_4))) {
                     XLDA_counter = XLDA_counter + 1;
                 }
             }
@@ -105,25 +121,25 @@ public:
 
         if (SDA_counter > 0) {
             pattern = pattern | 0b00000001;
-            if (SDA_counter > 3) {
+            if (SDA_counter > FREQUENT_ACCESS_THRESHOLD) {
                 pattern = pattern | 0b00000010;
             }
         }
         if (MDA_counter > 0) {
             pattern = pattern | 0b00000100;
-            if (MDA_counter > 3) {
+            if (MDA_counter > FREQUENT_ACCESS_THRESHOLD) {
                 pattern = pattern | 0b00001000;
             }
         }
         if (LDA_counter > 0) {
             pattern = pattern | 0b00010000;
-            if (LDA_counter > 3) {
+            if (LDA_counter > FREQUENT_ACCESS_THRESHOLD) {
                 pattern = pattern | 0b00100000;
             }
         }
         if (XLDA_counter > 0) {
             pattern = pattern | 0b01000000;
-            if (XLDA_counter > 3) {
+            if (XLDA_counter > FREQUENT_ACCESS_THRESHOLD) {
                 pattern = pattern | 0b10000000;
             }
         }
@@ -134,33 +150,35 @@ public:
         uint16_t pattern = Q_patterns[address];
         float priority = BASE_PRIORITY;
         if (pattern & 0b00000001) {
-            priority = priority + 14 * calculateMultiplier(0);
+            priority = priority + PRIORITY_MULTIPLIER_SDA * calculateMultiplier(0);
         }
         if (pattern & 0b00000010) {
-            priority = priority + 7 * calculateMultiplier(1);
+            priority = priority + PRIORITY_MULTIPLIER_SDA_FREQ * calculateMultiplier(1);
         }
         if (pattern & 0b00000100) {
-            priority = priority + 10 * calculateMultiplier(2);
+            priority = priority + PRIORITY_MULTIPLIER_MDA * calculateMultiplier(2);
         }
         if (pattern & 0b00001000) {
-            priority = priority + 5 * calculateMultiplier(3);
+            priority = priority + PRIORITY_MULTIPLIER_MDA_FREQ * calculateMultiplier(3);
         }
         if (pattern & 0b00010000) {
-            priority = priority + 6 * calculateMultiplier(4);
+            priority = priority + PRIORITY_MULTIPLIER_LDA * calculateMultiplier(4);
         }
         if (pattern & 0b00100000) {
-            priority = priority + 3 * calculateMultiplier(5);
+            priority = priority + PRIORITY_MULTIPLIER_LDA_FREQ * calculateMultiplier(5);
         }
         if (pattern & 0b01000000) {
-            priority = priority + 2 * calculateMultiplier(6);
+            priority = priority + PRIORITY_MULTIPLIER_XLDA * calculateMultiplier(6);
         }
         if (pattern & 0b10000000) {
-            priority = priority + 1 * calculateMultiplier(7);
+            priority = priority + PRIORITY_MULTIPLIER_XLDA_FREQ * calculateMultiplier(7);
         }
 
         for (int i = 0; i < Q_RVQ_reuse_counter.size(); i++) {
-            DPRINTF(ZIVCache, "Reuse counter at %d: %d \n", i, Q_RVQ_reuse_counter[i]);
-            DPRINTF(ZIVCache, "Reuse score at %d: %f \n", i, calculateMultiplier(i));
+            DPRINTF(ZIVCache, "RVQ counter at %d: %d \n", i, Q_RVQ_counter[i]);
+            DPRINTF(ZIVCache, "RVQ reuse counter at %d: %d \n", i, Q_RVQ_reuse_counter[i]);
+            DPRINTF(ZIVCache, "RVQ reuse score at %d: %f \n", i, Q_RVQ_reuse_score[i]);
+            DPRINTF(ZIVCache, "Score at %d: %f \n", i, calculateMultiplier(i));
         }
         
         return priority;
@@ -187,9 +205,26 @@ public:
     void removeFromQAsVictim(Addr address) {
         assert(Q.find(address) != Q.end());
 
+        // update Q_RVQ
         Q_RVQ.push_front({address, Q_patterns[address]});
         if (Q_RVQ.size() > RVQ_SIZE) {
             Q_RVQ.pop_back();
+        }
+        // also update Q_RVQ_counter to record the frequency of each access pattern
+        bool decrement_flag = false;
+        for (int bit = 0; bit < Q_RVQ_counter.size(); bit++) {
+            if (Q_patterns[address] & (1u << bit)) {
+                Q_RVQ_counter[bit] += 1;
+                if (Q_RVQ_counter[bit] > RVQ_COUNTER_MAX) {
+                    decrement_flag = true;
+                }
+            }
+        }
+        // half all entries of Q_RVQ_counter if overflow
+        if (decrement_flag) {
+            for (int i = 0; i < Q_RVQ_counter.size(); i++) {
+                Q_RVQ_counter[i] = Q_RVQ_counter[i] / 2;
+            }
         }
 
         Q.erase(address);
@@ -476,16 +511,9 @@ public:
             }
         }
         if (update_flag) {
-            std::array<uint16_t, 8> Q_RVQ_all_pattern_counter{0, 0, 0, 0, 0, 0, 0, 0};
-            for (const auto& pair : Q_RVQ) {
-                for (int bit = 0; bit < Q_RVQ_all_pattern_counter.size(); bit++) {
-                    if (pair.second & (1u << bit)) {
-                        Q_RVQ_all_pattern_counter[bit] += 1;
-                    }
-                }
-            }
             for (int i = 0; i < Q_RVQ_reuse_counter.size(); i++) {
-                Q_RVQ_reuse_score[i] = (Q_RVQ_all_pattern_counter[i] > 0) ? (static_cast<float>(Q_RVQ_reuse_counter[i]) / Q_RVQ_all_pattern_counter[i]) : 0;
+                float reuse_score = (Q_RVQ_counter[i] > 0) ? (static_cast<float>(Q_RVQ_reuse_counter[i]) / Q_RVQ_counter[i]) : static_cast<float>(Q_RVQ_reuse_counter[i]);
+                Q_RVQ_reuse_score[i] = (reuse_score < 1) ? reuse_score : 1;
             }
         }
     }
@@ -570,8 +598,9 @@ protected:
     std::unordered_map<Addr, float> Q_priority; // second: priority index
 
     std::deque<std::pair<Addr, std::uint16_t>> Q_RVQ; // list of recent Q victims, max size = RVQ_SIZE
+    std::array<uint16_t, 8> Q_RVQ_counter{1, 1, 1, 1, 1, 1, 1, 1}; // [0]: SDA-1; [1]: SDA-1+; [2]: MDA-1+; [3]: MDA-1+; [4]: LDA-1; [5]: LDA-1+; [6]: XLDA-1; [7]: XLDA-1+
     std::array<uint16_t, 8> Q_RVQ_reuse_counter{1, 1, 1, 1, 1, 1, 1, 1}; // [0]: SDA-1; [1]: SDA-1+; [2]: MDA-1+; [3]: MDA-1+; [4]: LDA-1; [5]: LDA-1+; [6]: XLDA-1; [7]: XLDA-1+
-    std::array<float, 8> Q_RVQ_reuse_score{0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01}; // weighted count
+    std::array<float, 8> Q_RVQ_reuse_score{1, 1, 1, 1, 1, 1, 1, 1}; // weighted count
 
     AccessRecordsList<Addr, Tick> Q_access_records;
     std::unordered_map<Addr, std::vector<std::pair<Tick, int>>> Q_sharer_records;
