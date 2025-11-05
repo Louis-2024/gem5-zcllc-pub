@@ -309,6 +309,13 @@ public:
     bool ziv_enabled() const {
         return m_ziv;
     }
+
+    int getAwaitWriteback() {
+        return awaitWriteback;
+    }
+    void setAwaitWriteback(int input) {
+        awaitWriteback = input;
+    }
     
 
 protected:
@@ -329,6 +336,7 @@ protected:
     int pri_tot = -1;
 
     int totalPrivateCache = 0;
+    int awaitWriteback = 0;
 
 private:
     // We don't need to copy this

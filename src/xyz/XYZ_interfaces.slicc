@@ -49,6 +49,8 @@ structure (XYZCacheMemory, external = "yes") {
   bool vi_enabled();
   bool ziv_enabled();
   Addr simpleProbe(Addr);
+  int getAwaitWriteback();
+  void setAwaitWriteback(int);
 
 
   // hardware transactional memory
