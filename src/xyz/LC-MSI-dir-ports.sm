@@ -10,9 +10,7 @@
   in_port(memQueue_in, MemoryMsg, responseFromMemory) {
       if (memQueue_in.isReady(clockEdge())) {
           peek(memQueue_in, MemoryMsg) {
-              
               Entry e := getCacheEntry(in_msg.addr);
-
               TBE tbe := TBEs[in_msg.addr];
               TBE wb_tbe := WB_TBEs[in_msg.addr];
 
@@ -43,9 +41,23 @@
                     } else {
                         trigger(Event:MemAck, in_msg.addr, e, tbe);
                     }
+                  } else if (xyzCacheMemory.checkVBEntryByAddr(in_msg.addr)) {
+                      if (in_msg.Type == MemoryRequestType:MEMORY_WB) {
+                          int index := xyzCacheMemory.getIndexByAddr(in_msg.addr);
+                          assert(index >= 0);
+                          int mem_ack_out := xyzCacheMemory.getMemAckOutstandingByIndex(index);
+                          assert(mem_ack_out > 0);
+                          if (mem_ack_out == 1) {
+                              xyzCacheMemory.removeVBEntryByAddr(in_msg.addr);
+                          } else {
+                              xyzCacheMemory.setMemAckOutstandingByIndex(index, mem_ack_out - 1);
+                          }
+                      }
                   } else {
-                        error("Invalid scenario: MemAck received for a line that is not in the cache.");
+                      error("Invalid scenario: MemAck received for a line that is not in the cache.");
                   }
+
+
               } else {
                   error("Invalid message");
               }
@@ -191,6 +203,22 @@
     }
 
   in_port(request_in, RequestMsg, requestFromCache) {
+      // first, check WB
+      if (xyzCacheMemory.existVBEntryToWB()) {
+        int vb_index := xyzCacheMemory.getVBEntryIndexToWB();
+        assert(vb_index >= 0);
+        enqueue(memQueue_out, MemoryMsg, toMemLatency) {
+            out_msg.addr := xyzCacheMemory.getAddrByIndex(vb_index);
+            out_msg.Type := MemoryRequestType:MEMORY_WB;
+            out_msg.Sender := xyzCacheMemory.getSenderByIndex(vb_index);
+            out_msg.MessageSize := MessageSizeType:Writeback_Data;
+            out_msg.DataBlk := xyzCacheMemory.getDataBlkByIndex(vb_index);
+            out_msg.Len := 0;
+        }
+        xyzCacheMemory.setMemAckOutstandingByIndex(vb_index, xyzCacheMemory.getMemAckOutstandingByIndex(vb_index) + 1);
+      }
+      
+      // second, handle messages
       if (request_in.isReady(clockEdge())) {
           peek(request_in, RequestMsg) {
               // This include wired-back request...
@@ -222,9 +250,9 @@
                   trigger(Event:Order, in_msg.addr, e, tbe);
               } else if(in_msg.Type == CoherenceRequestType:GetS || in_msg.Type == CoherenceRequestType:GetM) {
                   assert(xyzCacheMemory.vi_enabled() == false || xyzCacheMemory.calculateVIwithDelta(0, 0, sum_prv_capacity)); 
-                    DPRINTF(RubySlicc, "Hitting a GetM or GetS\n");
-                    DPRINTF(RubySlicc, "is_invalid(e): %d\n", is_invalid(e));
-                    DPRINTF(RubySlicc, "xyzCacheMemory.xyzCREAvail(in_msg.addr): %x %d\n", in_msg.addr, xyzCacheMemory.xyzCREAvail(in_msg.addr));
+                  DPRINTF(RubySlicc, "Hitting a GetM or GetS\n");
+                  DPRINTF(RubySlicc, "is_invalid(e): %d\n", is_invalid(e));
+                  DPRINTF(RubySlicc, "xyzCacheMemory.xyzCREAvail(in_msg.addr): %x %d\n", in_msg.addr, xyzCacheMemory.xyzCREAvail(in_msg.addr));
                   if(is_invalid(e) && xyzCacheMemory.xyzCREAvail(in_msg.addr) == false) {
                       /*
                       // Should not be the case when vi is employed
@@ -234,14 +262,14 @@
                       // if vi enabled, replacement should not happen
                       assert(xyzCacheMemory.vi_enabled() == false);
                       trigger(Event:Replacement, victim_addr, victim_entry, victim_tbe); */
-                          // Do a write back from |Q| before doing NonLast WB
-                          // Same slot thing, the original request can come again
-                          Addr victim_addr := xyzCacheMemory.simpleProbe(in_msg.addr);
-                          Entry victim_entry := getCacheEntry(victim_addr);
+                      // Do a write back from |Q| before doing NonLast WB
+                      // Same slot thing, the original request can come again
+                      Addr victim_addr := xyzCacheMemory.simpleProbe(in_msg.addr);
+                      Entry victim_entry := getCacheEntry(victim_addr);
 
-                          TBE victim_tbe := TBEs[victim_addr];
-                          // assert(victim_entry.DirState == State:LLCOnly);
-                          trigger(Event:Replacement, victim_addr, victim_entry, victim_tbe);
+                      TBE victim_tbe := TBEs[victim_addr];
+                      // assert(victim_entry.DirState == State:LLCOnly);
+                      trigger(Event:Replacement, victim_addr, victim_entry, victim_tbe);
                   } else {
                       // trigger replacement 
                       if (in_msg.Type == CoherenceRequestType:GetS) {
@@ -249,6 +277,9 @@
                             trigger(Event:GetS, in_msg.addr, e, tbe);
                           } else if(is_valid(wb_tbe)) {
                             trigger(Event:GetS, in_msg.addr, e, wb_tbe);
+                          } else if ((!is_valid(tbe)) && xyzCacheMemory.checkVBEntryByAddr(in_msg.addr)) {
+                            // fetch from VB
+                            trigger(Event:GetS_VB, in_msg.addr, e, tbe);
                           } else {
                             // could be missing both
                             trigger(Event:GetS, in_msg.addr, e, tbe);
@@ -258,6 +289,9 @@
                             trigger(Event:GetM, in_msg.addr, e, tbe);
                           } else if(is_valid(wb_tbe)) {
                             trigger(Event:GetM, in_msg.addr, e, wb_tbe);
+                          } else if ((!is_valid(tbe)) && xyzCacheMemory.checkVBEntryByAddr(in_msg.addr)) {
+                            // fetch from VB
+                            trigger(Event:GetM_VB, in_msg.addr, e, tbe);
                           } else {
                             trigger(Event:GetM, in_msg.addr, e, tbe);
                           }
@@ -266,69 +300,61 @@
                       }
                   }
               } else if (in_msg.Type == CoherenceRequestType:PutS) {
-                  // first, check awaitWB flag; if awaitWB == 1, skip the cycle; if awaitWB == 0, proceed
-                  // second, check VINV; if violated, start WB
-                  // third, handle incoming request
-                  if (xyzCacheMemory.getAwaitWriteback() == 1) {
-                      DPRINTF(RubySlicc, "Awaiting to handle request from request_in.PutS: %x \n", in_msg.addr);
-                  } else if (xyzCacheMemory.vi_enabled() && xyzCacheMemory.calculateVIwithDelta(0, 1, sum_prv_capacity) == false && xyzCacheMemory.getNotSync() > 0) {
-                      xyzCacheMemory.setAwaitWriteback(1);
+                  // first, check VINV; if violated, relocate
+                  if (xyzCacheMemory.vi_enabled() && xyzCacheMemory.calculateVIwithDelta(0, 1, sum_prv_capacity) == false && xyzCacheMemory.getNotSync() > 0) {
                       Addr victim_addr := xyzCacheMemory.simpleProbe(in_msg.addr);
                       DPRINTF(RubySlicc, "Writing-back LLC line %x from request_in.PutS: %x \n", victim_addr, in_msg.addr);
                       Entry victim_entry := getCacheEntry(victim_addr);
                       TBE victim_tbe := TBEs[victim_addr];
                       xyzStatsObject.recordPutS(false);
-                      trigger(Event:Sync, victim_addr, victim_entry, victim_tbe);
-                  } else {
-                      DPRINTF(RubySlicc, "Handling request from request_in.PutS: %x \n", in_msg.addr);
-                      if(is_invalid(e)) { // invalid PutS entry
-                          assert(xyzCacheMemory.ziv_enabled() == false);
-                          trigger(Event:PutSNotLast, in_msg.addr, e, tbe); // just ack
-                      } else if (e.Sharers.count() == 1 && e.Sharers.isElement(in_msg.Requestor)) { // single sharer
+                      trigger(Event:Sync_VB, victim_addr, victim_entry, victim_tbe);
+                  }
+                  // second, handle incoming request
+                  DPRINTF(RubySlicc, "Handling request from request_in.PutS: %x \n", in_msg.addr);
+                  if(is_invalid(e)) { // invalid PutS entry
+                      assert(xyzCacheMemory.ziv_enabled() == false);
+                      trigger(Event:PutSNotLast, in_msg.addr, e, tbe); // just ack
+                  } else if (e.Sharers.count() == 1 && e.Sharers.isElement(in_msg.Requestor)) { // single sharer
+                      xyzStatsObject.recordPutS(false);
+                      trigger(Event:PutSLast, in_msg.addr, e, tbe);
+                  } else { // multiple sharers
+                      if(e.Sharers.isElement(in_msg.Requestor)) {
                           xyzStatsObject.recordPutS(false);
-                          trigger(Event:PutSLast, in_msg.addr, e, tbe);
-                      } else { // multiple sharers
-                          if(e.Sharers.isElement(in_msg.Requestor)) {
-                              xyzStatsObject.recordPutS(false);
-                              trigger(Event:PutSNotLast, in_msg.addr, e, tbe);
-                          } else {
-                              xyzStatsObject.recordPutS(false);
-                              trigger(Event:PutSNotLastNonSharer, in_msg.addr, e, tbe);
-                          }
+                          trigger(Event:PutSNotLast, in_msg.addr, e, tbe);
+                      } else {
+                          xyzStatsObject.recordPutS(false);
+                          trigger(Event:PutSNotLastNonSharer, in_msg.addr, e, tbe);
                       }
                   }
+
               } else if (in_msg.Type == CoherenceRequestType:PutM) {
-                  // first, check awaitWB flag; if awaitWB == 1, skip the cycle; if awaitWB == 0, proceed
-                  // second, check VINV; if violated, start WB
-                  // third, handle incoming request
-                  if (xyzCacheMemory.getAwaitWriteback() == 1) {
-                      DPRINTF(RubySlicc, "Awaiting to handle request from request_in.PutM: %x \n", in_msg.addr);
-                  } else if (xyzCacheMemory.vi_enabled() && xyzCacheMemory.calculateVIwithDelta(0, 1, sum_prv_capacity) == false && xyzCacheMemory.getNotSync() > 0) {
-                      xyzCacheMemory.setAwaitWriteback(1);
+                  // first, check VINV; if violated, relocate
+                  if (xyzCacheMemory.vi_enabled() && xyzCacheMemory.calculateVIwithDelta(0, 1, sum_prv_capacity) == false && xyzCacheMemory.getNotSync() > 0) {
                       Addr victim_addr := xyzCacheMemory.simpleProbe(in_msg.addr);
                       DPRINTF(RubySlicc, "Writing-back LLC line %x from request_in.PutM: %x \n", victim_addr, in_msg.addr);
                       Entry victim_entry := getCacheEntry(victim_addr);
                       TBE victim_tbe := TBEs[victim_addr];
                       xyzStatsObject.recordPutM(false);
-                      trigger(Event:Sync, victim_addr, victim_entry, victim_tbe);
+                      trigger(Event:Sync_VB, victim_addr, victim_entry, victim_tbe);
+                  }
+                  // second, handle incoming request
+                  DPRINTF(RubySlicc, "Handling request from request_in.PutM: %x \n", in_msg.addr);
+                  if (is_valid(e) && e.Owner.isElement(in_msg.Requestor)) {
+                      xyzStatsObject.recordPutM(false);
+                      trigger(Event:PutMOwner, in_msg.addr, e, tbe);
                   } else {
-                      DPRINTF(RubySlicc, "Handling request from request_in.PutM: %x \n", in_msg.addr);
-                      if (is_valid(e) && e.Owner.isElement(in_msg.Requestor)) {
+                      if(is_invalid(e)) {
+                          assert(xyzCacheMemory.ziv_enabled() == false);
+                          DPRINTF(RubySlicc, "PutM for non owner case %#x\n", in_msg.addr);
                           xyzStatsObject.recordPutM(false);
-                          trigger(Event:PutMOwner, in_msg.addr, e, tbe);
+                          trigger(Event:PutMNonOwner, in_msg.addr, e, tbe);
                       } else {
-                          if(is_invalid(e)) {
-                              assert(xyzCacheMemory.ziv_enabled() == false);
-                              DPRINTF(RubySlicc, "PutM for non owner case %#x\n", in_msg.addr);
-                              xyzStatsObject.recordPutM(false);
-                              trigger(Event:PutMNonOwner, in_msg.addr, e, tbe);
-                          } else {
-                              // assert(false);
-                              xyzStatsObject.recordPutM(false);
-                              trigger(Event:PutMNonOwner, in_msg.addr, e, tbe);
-                          }
+                          // assert(false);
+                          xyzStatsObject.recordPutM(false);
+                          trigger(Event:PutMNonOwner, in_msg.addr, e, tbe);
                       }
                   }
+
               } else {
                   error("Unexpected message type.");
               }

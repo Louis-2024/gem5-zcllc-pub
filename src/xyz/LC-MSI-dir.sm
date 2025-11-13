@@ -52,7 +52,7 @@ MessageBuffer *responseFromMemory;
       S, AccessPermission:Read_Only,   desc="At least one cache has the blk";
       M, AccessPermission:Invalid,     desc="A cache has the block in M";
       LLCOnly, AccessPermission:Read_Write, desc="In LLC only";
-      LLCOnly_m, AccessPermission:Read_Only, desc="Waiting for memory ACK";
+      LLCOnly_m, AccessPermission:Read_Only, desc="Waiting for memory ACK in LLC";
 
       // Transient states
       S_D, AccessPermission:Busy,      desc="Moving to S, but need data";
@@ -76,7 +76,9 @@ MessageBuffer *responseFromMemory;
   enumeration(Event, desc="Directory events") {
       // Data requests from the cache
       GetS,         desc="Request for read-only data from cache";
+      GetS_VB,         desc="Request for read-only data in VB from cache";
       GetM,         desc="Request for read-write data from cache";
+      GetM_VB,         desc="Request for read-write data in VB from cache";
       Replacement,  desc="Triggered when block is chosen as victim";
       ReplacementReorder,  desc="Triggered when block is chosen as victim";
 
@@ -92,6 +94,7 @@ MessageBuffer *responseFromMemory;
       // Cache responses
       Data,         desc="Response to fwd request with data";
       Sync,         desc="Writeback LLC Only";
+      Sync_VB,      desc="Writeback LLC through VB Only";
       InvAck,       desc="Ack from Core, for replacement of shared line";
 
       // From Memory
@@ -881,10 +884,14 @@ MessageBuffer *responseFromMemory;
   action(guardInWBTBE, "gOIW", desc="Invariant that ensures that stable states will only reside in cache and not TBE") {
     assert(is_valid(tbe));
   }
-  action(clearAwaitWriteback, "cawb", desc="Clear the awaitWriteback flag") {
-    xyzCacheMemory.setAwaitWriteback(0);
+
+  action(relocateCacheBlockToVB, "rVB", desc="Relocate Q cache block in LLC to VB for WB") {
+    xyzCacheMemory.relocateVictimToVB(cache_entry, machineID, cache_entry.MemAckOutstanding);
   }
   
+  action(getDataBlkFromVB, "gDfVB", desc="Get the DataBlk from VB, and assign it to cache entry") {
+    cache_entry.DataBlk := xyzCacheMemory.getDataBlkByIndex(xyzCacheMemory.getIndexByAddr(address));
+  }
 
   /* action(wakeupAndRetryRequest, 'wrt', desc="Wakeup and retry") {
       
@@ -964,7 +971,7 @@ MessageBuffer *responseFromMemory;
   }
   
   transition(LLCOnly, GetS, S) {
-      deallocateROCTBE;
+    deallocateROCTBE;
     addReqToSharers
     xyzAddToSharers;
     sendLLCToReq;
@@ -995,6 +1002,32 @@ MessageBuffer *responseFromMemory;
       popRequestQueue;
 
       markLLCDoneIfSplitBus;
+  }
+
+  transition(I, GetS_VB, S) {
+      deallocateROCTBE;
+      allocateCacheBlock;
+      addReqToSharers;
+      xyzAddToSharers;
+
+      getDataBlkFromVB;
+      sendLLCToReq;
+      popRequestQueue;
+
+      markLLCDone_WaitForDataIfNonSplit;
+  }
+
+  transition(I, GetM_VB, M) {
+      deallocateROCTBE;
+      allocateCacheBlock;
+      setOwner;
+      xyzSetOwner;
+
+      getDataBlkFromVB;
+      sendLLCToReq;
+      popRequestQueue;
+
+      markLLCDone_WaitForDataIfNonSplit;
   }
 
   transition(I, {PutSNotLast, PutSLast, PutMNonOwner}) {
@@ -1138,7 +1171,6 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
     // to indicate that a replacement is finished
     markLLCDoneIfNotSplitBus;
     clearPutSDelayMarkDone;
-    clearAwaitWriteback;
   }
   transition(LLCOnly_m, MemAck) {
     guardSplitBus;
@@ -1515,6 +1547,17 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
     popRequestQueue;
 
     deallocateWBTBE;
+
+    markLLCDone;
+  }
+  
+  transition(LLCOnly, Sync_VB, I) {
+    guardOnlyInCache;
+    zcllcguard;
+
+    relocateCacheBlockToVB;
+    markCRE;
+    deallocateCacheBlock;
 
     markLLCDone;
   }

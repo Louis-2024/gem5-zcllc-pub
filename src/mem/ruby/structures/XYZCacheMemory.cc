@@ -39,10 +39,19 @@ void XYZCacheMemory::init() {
     isCRE.resize(m_cache_num_sets,
                     std::vector<bool>(m_cache_assoc, 1));
     CRETotal = getNumBlocks();
+
+    m_cache_VB.resize(VB_SIZE);
 }
 
 
-XYZCacheMemory::~XYZCacheMemory() {}
+XYZCacheMemory::~XYZCacheMemory() {
+    for (int i = 0; i < VB_SIZE; i++) {
+        if (m_cache_VB[i] != nullptr) {
+            delete m_cache_VB[i];
+            m_cache_VB[i] = nullptr;
+        }
+    }
+}
 
 
 // looks an address up in the cache
@@ -171,9 +180,6 @@ void XYZCacheMemory::relocateVictim(AbstractCacheEntry* entry, Location targetLo
     CRECountPerSet[row] -= (1 - is_original_entry_cre);
     CRETotal -= (1 - is_original_entry_cre);
 
-
-
-
     // could be relocating to self
     if(targetEntry != nullptr) {
         bool selfRelocation = targetEntry == entry;
@@ -223,6 +229,40 @@ void XYZCacheMemory::relocateVictim(AbstractCacheEntry* entry, Location targetLo
     m_replacementPolicy_ptr->reset(entry->replacementData);
     */
 }
+void XYZCacheMemory::relocateVictimToVB(AbstractCacheEntry* entry, MachineID Sender, int MemAckOutstanding) {
+    auto orig_row = entry->getSet();
+    auto orig_loc = entry->getWay();
+    assert(!isCRE[orig_row][orig_loc]); // only send non-CRE to VB for WB
+    DPRINTF(ZIVCache, "ZIV relocating %#x to VB \n", entry->m_Address);
+
+    // find available VB slot
+    int vb_slot = -1;
+    for (int i = 0; i < VB_SIZE; i++) {
+        if (m_cache_VB[i] == nullptr) {
+            vb_slot = i;
+            break;
+        }
+    }
+    assert(vb_slot != -1);
+
+    // insert entry to VB
+    Addr addr = entry->m_Address;
+    DataBlock data = entry->getDataBlk();
+    VBEntry* vb_entry = new VBEntry(addr, data, Sender, MemAckOutstanding);
+    m_VB_index[addr] = vb_slot;
+    m_cache_VB[vb_slot] = vb_entry;
+
+    // validate occupancy of VB
+    int m_cache_VB_occupancy = 0;
+    for (int i = 0; i < VB_SIZE; i++) {
+        if (m_cache_VB[i] != nullptr) {
+            m_cache_VB_occupancy++;
+        }
+    }
+    assert(m_VB_index.size() <= VB_SIZE);
+    assert(m_VB_index.size() == m_cache_VB_occupancy);
+}
+
 
 }; // namespace ruby
 }; // namespace gem5

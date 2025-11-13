@@ -26,6 +26,8 @@
 #include "params/XYZCache.hh"
 #include "sim/sim_object.hh"
 
+#define VB_SIZE 100 // number of cycles needed to complete WB = 100
+
 namespace gem5 {
 
 namespace ruby {
@@ -34,6 +36,15 @@ class XYZCacheMemory : public CacheMemory {
     struct Location {
         int row;
         int loc;
+    };
+    struct VBEntry {
+        Addr addr;
+        DataBlock DataBlk;
+        MachineID Sender;
+        int MemAckOutstanding;
+        VBEntry() : addr(0), DataBlk(), Sender(), MemAckOutstanding(0) {}
+        VBEntry(Addr addr, const DataBlock& DataBlk, MachineID Sender, int MemAckOutstanding): addr(addr), DataBlk(DataBlk), Sender(Sender), MemAckOutstanding(MemAckOutstanding) {}
+        ~VBEntry() {}
     };
 public:
     typedef XYZCacheParams XYZParams;
@@ -214,6 +225,7 @@ public:
     }
     void reportInvariant(Addr address);
     void relocateVictim(AbstractCacheEntry* entry, Location targetLocation);
+    void relocateVictimToVB(AbstractCacheEntry* entry, MachineID Sender, int MemAckOutstanding);
     AbstractCacheEntry* cacheProbeEntry(Addr address) const {
         // just return an entry instead of an address, used to find a victim to relocate
         assert(address == makeLineAddress(address));
@@ -310,11 +322,76 @@ public:
         return m_ziv;
     }
 
-    int getAwaitWriteback() {
-        return awaitWriteback;
+    bool existVBEntryToWB() {
+        for (const auto& [addr, index] : m_VB_index) {
+            assert(m_cache_VB[index] != nullptr);
+            if (m_cache_VB[index]->MemAckOutstanding == 0) {
+                return true;
+            }
+        }
+        return false;
     }
-    void setAwaitWriteback(int input) {
-        awaitWriteback = input;
+
+    int getVBEntryIndexToWB() {
+        for (const auto& [addr, index] : m_VB_index) {
+            assert(m_cache_VB[index] != nullptr);
+            if (m_cache_VB[index]->MemAckOutstanding == 0) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    Addr getAddrByIndex(int index) {
+        VBEntry* entry = m_cache_VB[index];
+        assert(entry != nullptr);
+        return (entry->addr);
+    }
+
+    DataBlock getDataBlkByIndex(int index) {
+        VBEntry* entry = m_cache_VB[index];
+        assert(entry != nullptr);
+        return (entry->DataBlk);
+    }
+
+    MachineID getSenderByIndex(int index) {
+        VBEntry* entry = m_cache_VB[index];
+        assert(entry != nullptr);
+        return (entry->Sender);
+    }
+
+    int getMemAckOutstandingByIndex(int index) {
+        VBEntry* entry = m_cache_VB[index];
+        assert(entry != nullptr);
+        return (entry->MemAckOutstanding);
+    }
+
+    void setMemAckOutstandingByIndex(int index, int value) {
+        VBEntry* entry = m_cache_VB[index];
+        assert(entry != nullptr);
+        entry->MemAckOutstanding = value;
+    }
+
+    bool checkVBEntryByAddr(Addr addr) {
+        return (m_VB_index.find(addr) != m_VB_index.end());
+    }
+
+    int getIndexByAddr(Addr addr) {
+        if (checkVBEntryByAddr(addr)) {
+            return m_VB_index[addr];
+        } else {
+            return -1;
+        }
+    }
+
+    void removeVBEntryByAddr(Addr addr) {
+        if (checkVBEntryByAddr(addr)) {
+            // remove from m_cache_VB
+            delete m_cache_VB[m_VB_index[addr]];
+            m_cache_VB[m_VB_index[addr]] = nullptr;
+            // remove from m_VB_index
+            m_VB_index.erase(addr);
+        }
     }
     
 
@@ -326,6 +403,9 @@ protected:
     // Store the number of sharers for cache lines cached
     std::unordered_map<Addr, int> P; // the P set for maintaining P
     std::unordered_set<Addr> Q; // the lines that are dirty but not privately cached
+    // Store the Q lines for WB in VB
+    std::unordered_map<Addr, int> m_VB_index;
+    std::vector<VBEntry*> m_cache_VB;
 
     std::unordered_map<Addr, std::vector<std::pair<Tick, int>>> Q_sharer_records;
     AccessRecordsList<Addr, Tick> Q_access_records;
@@ -336,7 +416,6 @@ protected:
     int pri_tot = -1;
 
     int totalPrivateCache = 0;
-    int awaitWriteback = 0;
 
 private:
     // We don't need to copy this
