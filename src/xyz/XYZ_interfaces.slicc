@@ -60,6 +60,8 @@ structure (XYZCacheMemory, external = "yes") {
   bool checkVBEntryByAddr(Addr addr);
   int getIndexByAddr(Addr addr);
   void removeVBEntryByAddr(Addr addr);
+  int getVBSize();
+  void setWBRequestSentByIndex(int index);
 
   // hardware transactional memory
   void htmCommitTransaction();

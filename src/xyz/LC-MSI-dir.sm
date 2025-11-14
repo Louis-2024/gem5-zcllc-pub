@@ -101,6 +101,8 @@ MessageBuffer *responseFromMemory;
       MemData,      desc="Data from memory";
       MemAck,       desc="Ack from memory that write is complete";
       LastMemAck,       desc="Ack from memory that write is complete";
+      MemAck_VB, desc="";
+      LastMemAck_VB, desc="";
 
       // Ordering
       Order,        desc="Order what every request";
@@ -887,6 +889,7 @@ MessageBuffer *responseFromMemory;
 
   action(relocateCacheBlockToVB, "rVB", desc="Relocate Q cache block in LLC to VB for WB") {
     xyzCacheMemory.relocateVictimToVB(cache_entry, machineID, cache_entry.MemAckOutstanding);
+    DPRINTF(RubySlicc, "VB size = %d \n", xyzCacheMemory.getVBSize());
   }
   
   action(getDataBlkFromVB, "gDfVB", desc="Get the DataBlk from VB, and assign it to cache entry") {
@@ -1172,6 +1175,7 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
     markLLCDoneIfNotSplitBus;
     clearPutSDelayMarkDone;
   }
+
   transition(LLCOnly_m, MemAck) {
     guardSplitBus;
 
@@ -1181,6 +1185,19 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
     popMemQueue;
     kd_wakeUpDependents;
     
+  }
+
+  transition({LLCOnly, I, S, M, S_m, LLCOnly_m, M_m, II_m, II_dm}, LastMemAck_VB) {
+    popMemQueue;
+    kd_wakeUpDependents;
+    
+    // markLLCDoneIfNotSplitBus;
+    clearPutSDelayMarkDone;
+  }
+
+  transition({LLCOnly, I, S, M, S_m, LLCOnly_m, M_m, II_m, II_dm}, MemAck_VB) {
+    popMemQueue;
+    kd_wakeUpDependents;
   }
   
   // This transition is still needed, and should mark the slot end

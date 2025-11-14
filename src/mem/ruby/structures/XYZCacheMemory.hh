@@ -42,8 +42,9 @@ class XYZCacheMemory : public CacheMemory {
         DataBlock DataBlk;
         MachineID Sender;
         int MemAckOutstanding;
-        VBEntry() : addr(0), DataBlk(), Sender(), MemAckOutstanding(0) {}
-        VBEntry(Addr addr, const DataBlock& DataBlk, MachineID Sender, int MemAckOutstanding): addr(addr), DataBlk(DataBlk), Sender(Sender), MemAckOutstanding(MemAckOutstanding) {}
+        int WBRequestSent;
+        VBEntry() : addr(0), DataBlk(), Sender(), MemAckOutstanding(0), WBRequestSent(0) {}
+        VBEntry(Addr addr, const DataBlock& DataBlk, MachineID Sender, int MemAckOutstanding): addr(addr), DataBlk(DataBlk), Sender(Sender), MemAckOutstanding(MemAckOutstanding), WBRequestSent(0) {}
         ~VBEntry() {}
     };
 public:
@@ -299,7 +300,14 @@ public:
         assert(Q.size() > 0);
 
         Addr victim = *Q.begin();
-        //
+        // Tick last_access_time = curTick();
+        // for (const Addr& Q_addr : Q) {
+        //     Tick Q_access_time = getLastAccessTime(Q_addr);
+        //     if (Q_access_time < last_access_time) {
+        //         last_access_time = Q_access_time;
+        //         victim = Q_addr;
+        //     }
+        // }
         
         assert(isTagPresent(victim));
         return victim;
@@ -309,7 +317,14 @@ public:
         assert(Q.size() > 0);
 
         Addr victim = *Q.begin();
-        //
+        // Tick last_access_time = curTick();
+        // for (const Addr& Q_addr : Q) {
+        //     Tick Q_access_time = getLastAccessTime(Q_addr);
+        //     if (Q_access_time < last_access_time) {
+        //         last_access_time = Q_access_time;
+        //         victim = Q_addr;
+        //     }
+        // }
 
         assert(isTagPresent(victim));
         return victim;
@@ -325,7 +340,7 @@ public:
     bool existVBEntryToWB() {
         for (const auto& [addr, index] : m_VB_index) {
             assert(m_cache_VB[index] != nullptr);
-            if (m_cache_VB[index]->MemAckOutstanding == 0) {
+            if (m_cache_VB[index]->WBRequestSent == 0) {
                 return true;
             }
         }
@@ -335,7 +350,7 @@ public:
     int getVBEntryIndexToWB() {
         for (const auto& [addr, index] : m_VB_index) {
             assert(m_cache_VB[index] != nullptr);
-            if (m_cache_VB[index]->MemAckOutstanding == 0) {
+            if (m_cache_VB[index]->WBRequestSent == 0) {
                 return index;
             }
         }
@@ -393,8 +408,17 @@ public:
             m_VB_index.erase(addr);
         }
     }
-    
 
+    int getVBSize() {
+        return m_VB_index.size();
+    }
+
+    void setWBRequestSentByIndex(int index) {
+        VBEntry* entry = m_cache_VB[index];
+        assert(entry != nullptr);
+        entry->WBRequestSent = 1;
+    }
+    
 protected:
     bool m_use_vi;
     bool m_ziv;
