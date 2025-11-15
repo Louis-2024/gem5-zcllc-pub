@@ -285,7 +285,7 @@
                                 trigger(Event:GetS, in_msg.addr, e, tbe);
                               } else if(is_valid(wb_tbe)) {
                                 trigger(Event:GetS, in_msg.addr, e, wb_tbe);
-                              } else if (xyzCacheMemory.checkVBEntryByAddr(in_msg.addr)) {
+                              } else if (is_invalid(e) && xyzCacheMemory.checkVBEntryByAddr(in_msg.addr)) {
                                 // fetch from VB
                                 trigger(Event:GetS_VB, in_msg.addr, e, tbe);
                               } else {
@@ -297,7 +297,7 @@
                                 trigger(Event:GetM, in_msg.addr, e, tbe);
                               } else if(is_valid(wb_tbe)) {
                                 trigger(Event:GetM, in_msg.addr, e, wb_tbe);
-                              } else if (xyzCacheMemory.checkVBEntryByAddr(in_msg.addr)) {
+                              } else if (is_invalid(e) && xyzCacheMemory.checkVBEntryByAddr(in_msg.addr)) {
                                 // fetch from VB
                                 trigger(Event:GetM_VB, in_msg.addr, e, tbe);
                               } else {
