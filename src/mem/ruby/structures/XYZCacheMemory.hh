@@ -29,12 +29,8 @@
 #define VB_SIZE 100 // number of cycles needed to complete WB = 100
 
 #define RVQ_SIZE 2048
-
-#define SDA_BIN_SIZE 256
-#define MDA_BIN_SIZE 512
-#define LDA_BIN_SIZE 1024
-
-#define BASE_PRIORITY 12
+#define ACCESS_BIN_SIZE 512
+#define BASE_PRIORITY 2
 
 namespace gem5 {
 
@@ -96,17 +92,20 @@ public:
         int SDA_counter = 0;
         int MDA_counter = 0;
         int LDA_counter = 0;
+        int XLDA_counter = 0;
 
         auto pair_for_address = indices.find(address);
         if (pair_for_address != indices.end()) {
             const auto& indices_for_address = pair_for_address->second;
             for (int index : indices_for_address) {
-                if ((0 <= index) && (index < SDA_BIN_SIZE)) {
+                if ((0 <= index) && (index < ACCESS_BIN_SIZE)) {
                     SDA_counter = SDA_counter + 1;
-                } else if ((SDA_BIN_SIZE <= index) && (index < (SDA_BIN_SIZE + MDA_BIN_SIZE))) {
+                } else if ((ACCESS_BIN_SIZE <= index) && (index < 2 * ACCESS_BIN_SIZE)) {
                     MDA_counter = MDA_counter + 1;
-                } else if (((SDA_BIN_SIZE + MDA_BIN_SIZE) <= index) && (index < (SDA_BIN_SIZE + MDA_BIN_SIZE + LDA_BIN_SIZE))) {
+                } else if ((2 * ACCESS_BIN_SIZE <= index) && (index < 3 * ACCESS_BIN_SIZE)) {
                     LDA_counter = LDA_counter + 1;
+                } else if ((3 * ACCESS_BIN_SIZE <= index) && (index < 4 * ACCESS_BIN_SIZE)) {
+                    XLDA_counter = XLDA_counter + 1;
                 }
             }
         } else {
@@ -131,6 +130,12 @@ public:
                 pattern = pattern | 0b00100000;
             }
         }
+        if (XLDA_counter > 0) {
+            pattern = pattern | 0b01000000;
+            if (XLDA_counter > 3) {
+                pattern = pattern | 0b100000000;
+            }
+        }
         return pattern;
     }
 
@@ -138,21 +143,27 @@ public:
         uint16_t pattern = Q_patterns[address];
         float priority = BASE_PRIORITY;
         if (pattern & 0b00000001) {
-            priority = priority + 3;
+            priority = priority + 8;
         }
         if (pattern & 0b00000010) {
-            priority = priority + 3;
+            priority = priority + 4;
         }
         if (pattern & 0b00000100) {
-            priority = priority + 2;
+            priority = priority + 6;
         }
         if (pattern & 0b00001000) {
-            priority = priority + 2;
+            priority = priority + 3;
         }
         if (pattern & 0b00010000) {
-            priority = priority + 1;
+            priority = priority + 4;
         }
         if (pattern & 0b00100000) {
+            priority = priority + 2;
+        }
+        if (pattern & 0b01000000) {
+            priority = priority + 2;
+        }
+        if (pattern & 0b10000000) {
             priority = priority + 1;
         }
 
@@ -406,6 +417,44 @@ public:
         return Q_access_indices;
     }
 
+    // function that list Q lines from MRU to LRU
+    std::deque<Addr> getQLastAccessRecords () {
+        std::deque<Addr> Q_last_access_records; // head: mru; tail: lru
+        std::set<Addr> checked_address;
+        for (auto record_ptr = Q_access_records.end(); record_ptr != Q_access_records.begin();) {
+            record_ptr--;
+            const auto& record = *record_ptr;
+            if (checked_address.find(record.addr) == checked_address.end()) {
+                Q_last_access_records.push_back(record.addr);
+                checked_address.insert(record.addr);
+            }
+        }
+        assert(Q_last_access_records.size() == Q.size());
+        return Q_last_access_records;
+    }
+
+    // function that returns the LRU address in Q
+    Addr getLRUFromQ () {
+        std::deque<Addr> Q_last_access_records = getQLastAccessRecords();
+        Addr victim = 0;
+        while (Q_last_access_records.size() > 0) {
+            Addr victim_candidate = Q_last_access_records.back();
+            uint16_t priority = Q_priority[victim_candidate];
+            // probability of being chosen as victim = 2 ^ (-priority)
+            if (priority == 0) {
+                victim = victim_candidate;
+                break;
+            } else if (priority <= 5) {
+                if (std::rand() % ((int) (std::pow(2, priority))) == 0){
+                    victim = victim_candidate;
+                    break;
+                }
+            }
+            Q_last_access_records.pop_back();
+        }
+        return victim;
+    }
+
     // functions to select Q victim for CRE
     Addr xyzCacheProbe(Addr address) {
         if(!m_ziv) return cacheProbe(address);
@@ -424,15 +473,8 @@ public:
         for (auto& pair : Q_priority) {
             pair.second = pair.second - min_priority;
         }
-        // step 3: find the LRU entry of Q with 0 priority
-        Addr victim = 0x0000;
-        Tick victim_tick = UINT64_MAX;
-        for (const Addr& addr : Q) {
-            if ((Q_priority[addr] == 0) && (getLastAccessByAddr(addr) < victim_tick)) {
-                victim = addr;
-                victim_tick = getLastAccessByAddr(addr);
-            }
-        }
+        // step 3: find the victim using 1) last access time 2) priority
+        Addr victim = getLRUFromQ();
 
 
         assert(isTagPresent(victim));
@@ -454,15 +496,8 @@ public:
         for (auto& pair : Q_priority) {
             pair.second = pair.second - min_priority;
         }
-        // step 3: find the LRU entry of Q with 0 priority
-        Addr victim = 0x0000;
-        Tick victim_tick = UINT64_MAX;
-        for (const Addr& addr : Q) {
-            if ((Q_priority[addr] == 0) && (getLastAccessByAddr(addr) < victim_tick)) {
-                victim = addr;
-                victim_tick = getLastAccessByAddr(addr);
-            }
-        }
+        // step 3: find the victim using 1) last access time 2) priority
+        Addr victim = getLRUFromQ();
 
 
         assert(isTagPresent(victim));
@@ -575,7 +610,7 @@ protected:
     std::unordered_map<Addr, std::uint16_t> Q_priority; // second: priority index
 
     std::deque<std::pair<Addr, std::uint16_t>> Q_RVQ; // list of recent Q victims, max size = RVQ_SIZE
-    std::array<uint16_t, 4> Q_RVQ_reuse_counter; // [0]: SDA; [1]: MDA; [2]: LDA; [3]: default
+    std::array<uint16_t, 4> Q_RVQ_reuse_counter; // [0]: SDA; [1]: MDA; [2]: LDA; [3]: XLDA
 
     AccessRecordsList<Addr, Tick> Q_access_records;
     std::unordered_map<Addr, std::vector<std::pair<Tick, int>>> Q_sharer_records;
