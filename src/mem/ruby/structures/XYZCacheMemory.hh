@@ -28,9 +28,12 @@
 
 #define VB_SIZE 100 // number of cycles needed to complete WB = 100
 
-#define RVQ_SIZE 2048
+#define VB_SIZE 100 // number of cycles needed to complete WB = 100
+
+#define RVQ_SIZE 1536
 #define ACCESS_BIN_SIZE 512
-#define BASE_PRIORITY 2
+#define BASE_PRIORITY 4
+#define PROBABILITY_COEFFICIENT 1.5
 
 namespace gem5 {
 
@@ -143,22 +146,22 @@ public:
         uint16_t pattern = Q_patterns[address];
         float priority = BASE_PRIORITY;
         if (pattern & 0b00000001) {
-            priority = priority + 8;
+            priority = priority + 14;
         }
         if (pattern & 0b00000010) {
-            priority = priority + 4;
+            priority = priority + 7;
         }
         if (pattern & 0b00000100) {
-            priority = priority + 6;
+            priority = priority + 10;
         }
         if (pattern & 0b00001000) {
-            priority = priority + 3;
+            priority = priority + 5;
         }
         if (pattern & 0b00010000) {
-            priority = priority + 4;
+            priority = priority + 6;
         }
         if (pattern & 0b00100000) {
-            priority = priority + 2;
+            priority = priority + 3;
         }
         if (pattern & 0b01000000) {
             priority = priority + 2;
@@ -166,8 +169,7 @@ public:
         if (pattern & 0b10000000) {
             priority = priority + 1;
         }
-
-        DPRINTF(ZIVCache, "Address: %#x; Priority: %d \n", address, priority);
+        
         return static_cast<int>(std::lround(priority));
     }
 
@@ -440,12 +442,13 @@ public:
         while (Q_last_access_records.size() > 0) {
             Addr victim_candidate = Q_last_access_records.back();
             uint16_t priority = Q_priority[victim_candidate];
-            // probability of being chosen as victim = 2 ^ (-priority)
+            // probability of being chosen as victim = PROBABILITY_COEFFICIENT ^ (-priority)
             if (priority == 0) {
                 victim = victim_candidate;
                 break;
-            } else if (priority <= 5) {
-                if (std::rand() % ((int) (std::pow(2, priority))) == 0){
+            } else if (priority <= 8) {
+                double probability = std::exp(-static_cast<double>(priority) * std::log(static_cast<double>(PROBABILITY_COEFFICIENT)));
+                if (probability > static_cast<double>(std::rand()) / static_cast<double>(RAND_MAX + 1)){
                     victim = victim_candidate;
                     break;
                 }
