@@ -28,6 +28,13 @@
 
 #define VB_SIZE 100 // number of cycles needed to complete WB = 100
 
+#define SHORT_DISTANCE_ACCESS 0b0001
+#define MID_DISTANCE_ACCESS 0b0010
+#define LONG_DISTANCE_ACCESS 0b0100
+
+#define RVQ_SIZE 2048
+#define TIME_BIN_SIZE 512
+
 namespace gem5 {
 
 namespace ruby {
@@ -81,14 +88,50 @@ public:
     virtual const AbstractCacheEntry* lookup(Addr address) const;
     virtual void init();
 
+    uint16_t calculate_pattern(Addr address) {
+        // implement maths to calculate pattern
+        return 1;
+    }
+
+    int calculate_priority(Addr address) {
+        // implement maths to calculate priority
+        return 1;
+    }
+
     void addToQ(Addr address) {
+        assert(Q.find(address) == Q.end());
+
         Q.insert(address);
         addQAccessRecordsByAddr(address);
+        Q_patterns[address] = calculate_pattern(address);
+        Q_priority[address] = calculate_priority(address);
     }
 
     void removeFromQ(Addr address) {
+        assert(Q.find(address) != Q.end());
+
         Q.erase(address);
         removeQAccessRecordsByAddr(address);
+        Q_patterns.erase(address);
+        Q_priority.erase(address);
+    }
+
+    void removeFromQAsVictim(Addr address) {
+        assert(Q.find(address) != Q.end());
+
+        Q_RVQ.push_back({address, Q_patterns[address]});
+        if (Q_RVQ.size() > RVQ_SIZE) {
+            Q_RVQ.pop_front();
+        }
+
+        Q.erase(address);
+        removeQAccessRecordsByAddr(address);
+        Q_patterns.erase(address);
+        Q_priority.erase(address);
+
+        assert(Q_patterns.size() == Q.size());
+        assert(Q_priority.size() == Q.size());
+        assert(Q_RVQ.size() <= RVQ_SIZE);
     }
 
     virtual void addSharer(Addr address) {
@@ -154,7 +197,6 @@ public:
         assert(isTagPresent(address));
         auto it = P.find(address);
         assert(it != P.end());
-        assert(Q.find(address) == Q.end());
         totalPrivateCache -= it->second;
         P.erase(it);
         addToQ(address);
@@ -167,9 +209,8 @@ public:
         if(!m_ziv) return;
         DPRINTF(ZIVCache, "ZIV: marking %#x ad CRE\n", address);
         assert(isTagPresent(address));
-        assert(Q.find(address) != Q.end());
         assert(P.find(address) == P.end());
-        removeFromQ(address);
+        removeFromQAsVictim(address);
         removeSharerRecordsByAddr(address);
         auto e = lookup(address);
         auto row = e->getSet();
@@ -242,6 +283,16 @@ public:
                             getVictim(candidates)->getWay()];
     }
 
+    // functions to track last access time by address
+    Tick getLastAccessByAddr(Addr address) {
+        auto entry = lookup(address);
+        if(entry) {
+            return entry->getLastAccess();
+        } else {
+            return 0;
+        }
+    }
+
     // functions to track access records by address
     std::vector<Tick> getAccessRecordsByAddr(Addr address) {
         auto entry = lookup(address);
@@ -298,16 +349,29 @@ public:
         if(!m_ziv) return cacheProbe(address);
         assert(!xyzCREAvail(address));
         assert(Q.size() > 0);
-
-        Addr victim = *Q.begin();
-        // Tick last_access_time = curTick();
-        // for (const Addr& Q_addr : Q) {
-        //     Tick Q_access_time = getLastAccessTime(Q_addr);
-        //     if (Q_access_time < last_access_time) {
-        //         last_access_time = Q_access_time;
-        //         victim = Q_addr;
-        //     }
-        // }
+        
+        
+        // step 1: find the min priority
+        uint16_t min_priority = UINT16_MAX;
+        for (const Addr& addr : Q) {
+            if (Q_priority[addr] < min_priority) {
+                min_priority = Q_priority[addr];
+            }
+        }
+        // step 2: reduce min priority to 0
+        for (auto& pair : Q_priority) {
+            pair.second = pair.second - min_priority;
+        }
+        // step 3: find the LRU entry of Q with 0 priority
+        Addr victim = 0x0000;
+        Tick victim_tick = UINT64_MAX;
+        for (const Addr& addr : Q) {
+            if ((Q_priority[addr] == 0) && (getLastAccessByAddr(addr) < victim_tick)) {
+                victim = addr;
+                victim_tick = getLastAccessByAddr(addr);
+            }
+        }
+        
         
         assert(isTagPresent(victim));
         return victim;
@@ -316,15 +380,28 @@ public:
         if(!m_ziv) return cacheProbe(address);
         assert(Q.size() > 0);
 
-        Addr victim = *Q.begin();
-        // Tick last_access_time = curTick();
-        // for (const Addr& Q_addr : Q) {
-        //     Tick Q_access_time = getLastAccessTime(Q_addr);
-        //     if (Q_access_time < last_access_time) {
-        //         last_access_time = Q_access_time;
-        //         victim = Q_addr;
-        //     }
-        // }
+
+        // step 1: find the min priority
+        uint16_t min_priority = UINT16_MAX;
+        for (const Addr& addr : Q) {
+            if (Q_priority[addr] < min_priority) {
+                min_priority = Q_priority[addr];
+            }
+        }
+        // step 2: reduce min priority to 0
+        for (auto& pair : Q_priority) {
+            pair.second = pair.second - min_priority;
+        }
+        // step 3: find the LRU entry of Q with 0 priority
+        Addr victim = 0x0000;
+        Tick victim_tick = UINT64_MAX;
+        for (const Addr& addr : Q) {
+            if ((Q_priority[addr] == 0) && (getLastAccessByAddr(addr) < victim_tick)) {
+                victim = addr;
+                victim_tick = getLastAccessByAddr(addr);
+            }
+        }
+
 
         assert(isTagPresent(victim));
         return victim;
@@ -426,13 +503,20 @@ protected:
     std::unordered_map<Addr, Location> relocation_table;
     // Store the number of sharers for cache lines cached
     std::unordered_map<Addr, int> P; // the P set for maintaining P
+    
     std::unordered_set<Addr> Q; // the lines that are dirty but not privately cached
     // Store the Q lines for WB in VB
     std::unordered_map<Addr, int> m_VB_index;
     std::vector<VBEntry*> m_cache_VB;
+    
+    std::unordered_map<Addr, std::uint16_t> Q_patterns; // second: access pattern index
+    std::unordered_map<Addr, std::uint16_t> Q_priority; // second: priority index
 
-    std::unordered_map<Addr, std::vector<std::pair<Tick, int>>> Q_sharer_records;
+    std::deque<std::pair<Addr, std::uint16_t>> Q_RVQ; // list of recent Q victims, max size = RVQ_SIZE
+    std::array<uint16_t, 4> Q_RVQ_reuse_counter; // [0]: SDA; [1]: MDA; [2]: LDA; [3]: default
+
     AccessRecordsList<Addr, Tick> Q_access_records;
+    std::unordered_map<Addr, std::vector<std::pair<Tick, int>>> Q_sharer_records;
 
     std::vector<int> CRECountPerSet; // The number of CRE per set, initialized to be all zeros
     std::vector<std::vector<bool>> isCRE;
