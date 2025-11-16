@@ -300,14 +300,14 @@ public:
         assert(Q.size() > 0);
 
         Addr victim = *Q.begin();
-        // Tick last_access_time = curTick();
-        // for (const Addr& Q_addr : Q) {
-        //     Tick Q_access_time = getLastAccessTime(Q_addr);
-        //     if (Q_access_time < last_access_time) {
-        //         last_access_time = Q_access_time;
-        //         victim = Q_addr;
-        //     }
-        // }
+        Tick last_access_time = curTick();
+        for (const Addr& Q_addr : Q) {
+            Tick Q_access_time = lookup(Q_addr)->getLastAccess();
+            if (Q_access_time < last_access_time) {
+                last_access_time = Q_access_time;
+                victim = Q_addr;
+            }
+        }
         
         assert(isTagPresent(victim));
         return victim;
@@ -317,14 +317,14 @@ public:
         assert(Q.size() > 0);
 
         Addr victim = *Q.begin();
-        // Tick last_access_time = curTick();
-        // for (const Addr& Q_addr : Q) {
-        //     Tick Q_access_time = getLastAccessTime(Q_addr);
-        //     if (Q_access_time < last_access_time) {
-        //         last_access_time = Q_access_time;
-        //         victim = Q_addr;
-        //     }
-        // }
+        Tick last_access_time = curTick();
+        for (const Addr& Q_addr : Q) {
+            Tick Q_access_time = lookup(Q_addr)->getLastAccess();
+            if (Q_access_time < last_access_time) {
+                last_access_time = Q_access_time;
+                victim = Q_addr;
+            }
+        }
 
         assert(isTagPresent(victim));
         return victim;
