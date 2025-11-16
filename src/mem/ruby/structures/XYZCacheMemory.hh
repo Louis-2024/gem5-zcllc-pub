@@ -30,9 +30,10 @@
 #define VB_SIZE 100 // number of cycles needed to complete WB = 100
 
 #define RVQ_SIZE 1536
-#define ACCESS_BIN_SIZE 512
-#define BASE_PRIORITY 4
-#define PROBABILITY_COEFFICIENT 1.5
+#define RECENT_ACCESS_SIZE 1536
+
+#define BASE_PRIORITY 3
+#define PROBABILITY_COEFFICIENT 1.8
 
 namespace gem5 {
 
@@ -91,85 +92,48 @@ public:
         uint16_t pattern = 0;
         std::unordered_map<Addr, std::vector<int>> indices = getQAccessIndices();
 
-        int SDA_counter = 0;
-        int MDA_counter = 0;
-        int LDA_counter = 0;
-        int XLDA_counter = 0;
-
+        int access_counter = 0;
         auto pair_for_address = indices.find(address);
-        if (pair_for_address != indices.end()) {
-            const auto& indices_for_address = pair_for_address->second;
-            for (int index : indices_for_address) {
-                if ((0 <= index) && (index < ACCESS_BIN_SIZE)) {
-                    SDA_counter = SDA_counter + 1;
-                } else if ((ACCESS_BIN_SIZE <= index) && (index < 2 * ACCESS_BIN_SIZE)) {
-                    MDA_counter = MDA_counter + 1;
-                } else if ((2 * ACCESS_BIN_SIZE <= index) && (index < 3 * ACCESS_BIN_SIZE)) {
-                    LDA_counter = LDA_counter + 1;
-                } else if ((3 * ACCESS_BIN_SIZE <= index) && (index < 4 * ACCESS_BIN_SIZE)) {
-                    XLDA_counter = XLDA_counter + 1;
-                }
+        assert(pair_for_address != indices.end());
+
+        for (int index : pair_for_address->second) {
+            if ((0 <= index) && (index < RECENT_ACCESS_SIZE)) {
+                access_counter += 1;
             }
-        } else {
-            assert(false);
         }
 
-        if (SDA_counter > 0) {
-            pattern = pattern | 0b00000001;
-            if (SDA_counter > 3) {
-                pattern = pattern | 0b00000010;
-            }
+        if (access_counter > 0) {
+            pattern = pattern | 0b0001;
         }
-        if (MDA_counter > 0) {
-            pattern = pattern | 0b00000100;
-            if (MDA_counter > 3) {
-                pattern = pattern | 0b00001000;
-            }
+        if (access_counter > 1) {
+            pattern = pattern | 0b0010;
         }
-        if (LDA_counter > 0) {
-            pattern = pattern | 0b00010000;
-            if (LDA_counter > 3) {
-                pattern = pattern | 0b00100000;
-            }
+        if (access_counter > 3) {
+            pattern = pattern | 0b0100;
         }
-        if (XLDA_counter > 0) {
-            pattern = pattern | 0b01000000;
-            if (XLDA_counter > 3) {
-                pattern = pattern | 0b100000000;
-            }
+        if (access_counter > 7) {
+            pattern = pattern | 0b1000;
         }
+
         return pattern;
     }
 
-    uint16_t calculate_priority(Addr address) {
+    float calculate_priority(Addr address) {
         uint16_t pattern = Q_patterns[address];
         float priority = BASE_PRIORITY;
-        if (pattern & 0b00000001) {
-            priority = priority + 14;
-        }
-        if (pattern & 0b00000010) {
-            priority = priority + 7;
-        }
-        if (pattern & 0b00000100) {
-            priority = priority + 10;
-        }
-        if (pattern & 0b00001000) {
-            priority = priority + 5;
-        }
-        if (pattern & 0b00010000) {
-            priority = priority + 6;
-        }
-        if (pattern & 0b00100000) {
-            priority = priority + 3;
-        }
-        if (pattern & 0b01000000) {
+        if (pattern & 0b0001) {
             priority = priority + 2;
         }
-        if (pattern & 0b10000000) {
-            priority = priority + 1;
+        if (pattern & 0b0010) {
+            priority = priority + 2;
         }
-        
-        return static_cast<int>(std::lround(priority));
+        // if (pattern & 0b0100) {
+        //     priority = priority + 2;
+        // }
+        // if (pattern & 0b1000) {
+        //     priority = priority + 2;
+        // }
+        return priority;
     }
 
     void addToQ(Addr address) {
@@ -217,7 +181,6 @@ public:
         }
         if(P.find(address) == P.end()) P[address] = 0;
         P[address] += 1;
-        addSharerRecords(address, curTick(), P[address]);
         totalPrivateCache += 1;
         markEntryNotCRE(address);
         reportInvariant(address);
@@ -244,9 +207,7 @@ public:
             P[address] = 0;
         }
         P[address] = 1;
-        addSharerRecords(address, curTick(), 1);
         totalPrivateCache += 1;
-
         markEntryNotCRE(address);
         reportInvariant(address);
     }
@@ -262,7 +223,6 @@ public:
             addToQ(address);
             P.erase(it);
         }
-        addSharerRecords(address, curTick(), it->second);
         totalPrivateCache -= 1;
         reportInvariant(address);
     }
@@ -274,7 +234,6 @@ public:
         totalPrivateCache -= it->second;
         P.erase(it);
         addToQ(address);
-        addSharerRecords(address, curTick(), 0);
         reportInvariant(address);
     }
     // must be called afterwards
@@ -285,7 +244,6 @@ public:
         assert(isTagPresent(address));
         assert(P.find(address) == P.end());
         removeFromQAsVictim(address);
-        removeSharerRecordsByAddr(address);
         auto e = lookup(address);
         auto row = e->getSet();
         auto way = e->getWay();
@@ -376,22 +334,6 @@ public:
             return std::vector<Tick>();
         }
     }
-    
-    // functions to track sharer records by address
-    std::vector<std::pair<Tick, int>> getSharerRecordsByAddr (Addr address) {
-        auto sharers = Q_sharer_records.find(address);
-        if (sharers != Q_sharer_records.end()) {
-            return sharers->second;
-        } else {
-            return  std::vector<std::pair<Tick, int>>();
-        }
-    }
-    void addSharerRecords (Addr address, Tick tick, int num_sharers) {
-        Q_sharer_records[address].push_back({tick, num_sharers});
-    }
-    void removeSharerRecordsByAddr (Addr address) {
-        Q_sharer_records.erase(address);
-    }
 
     // functions to track access records of all Q lines
     AccessRecordsList<Addr, Tick> getQAccessRecords() {
@@ -440,13 +382,13 @@ public:
         Addr victim = 0;
         while (Q_last_access_records.size() > 0) {
             Addr victim_candidate = Q_last_access_records.back();
-            uint16_t priority = Q_priority[victim_candidate];
+            float priority = Q_priority[victim_candidate];
             // probability of being chosen as victim = PROBABILITY_COEFFICIENT ^ (-priority)
             if (priority == 0) {
                 victim = victim_candidate;
                 break;
             } else if (priority <= 8) {
-                float probability = std::exp(-static_cast<float>(priority) * std::log(static_cast<float>(PROBABILITY_COEFFICIENT)));
+                float probability = std::exp(-priority * std::log(static_cast<float>(PROBABILITY_COEFFICIENT)));
                 float random_between_0_and_1 = random_mt.random<float>();
                 if (probability > random_between_0_and_1){
                     victim = victim_candidate;
@@ -464,9 +406,8 @@ public:
         assert(!xyzCREAvail(address));
         assert(Q.size() > 0);
         
-        
         // step 1: find the min priority
-        uint16_t min_priority = UINT16_MAX;
+        float min_priority = UINT16_MAX;
         for (const Addr& addr : Q) {
             if (Q_priority[addr] < min_priority) {
                 min_priority = Q_priority[addr];
@@ -478,8 +419,6 @@ public:
         }
         // step 3: find the victim using 1) last access time 2) priority
         Addr victim = getLRUFromQ();
-
-        DPRINTF(ZIVCache, "victim: %#x, priority: %d \n", victim, Q_priority[victim]);
 
         assert(isTagPresent(victim));
         return victim;
@@ -488,9 +427,8 @@ public:
         if(!m_ziv) return cacheProbe(address);
         assert(Q.size() > 0);
 
-
         // step 1: find the min priority
-        uint16_t min_priority = UINT16_MAX;
+        float min_priority = UINT16_MAX;
         for (const Addr& addr : Q) {
             if (Q_priority[addr] < min_priority) {
                 min_priority = Q_priority[addr];
@@ -502,8 +440,6 @@ public:
         }
         // step 3: find the victim using 1) last access time 2) priority
         Addr victim = getLRUFromQ();
-
-        DPRINTF(ZIVCache, "victim: %#x, priority: %d \n", victim, Q_priority[victim]);
 
         assert(isTagPresent(victim));
         return victim;
@@ -612,13 +548,11 @@ protected:
     std::vector<VBEntry*> m_cache_VB;
     
     std::unordered_map<Addr, std::uint16_t> Q_patterns; // second: access pattern index
-    std::unordered_map<Addr, std::uint16_t> Q_priority; // second: priority index
+    std::unordered_map<Addr, float> Q_priority; // second: priority index
+    AccessRecordsList<Addr, Tick> Q_access_records;
 
     std::deque<std::pair<Addr, std::uint16_t>> Q_RVQ; // list of recent Q victims, max size = RVQ_SIZE
     std::array<uint16_t, 4> Q_RVQ_reuse_counter; // [0]: SDA; [1]: MDA; [2]: LDA; [3]: XLDA
-
-    AccessRecordsList<Addr, Tick> Q_access_records;
-    std::unordered_map<Addr, std::vector<std::pair<Tick, int>>> Q_sharer_records;
 
     std::vector<int> CRECountPerSet; // The number of CRE per set, initialized to be all zeros
     std::vector<std::vector<bool>> isCRE;
