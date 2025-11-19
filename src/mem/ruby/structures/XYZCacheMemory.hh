@@ -211,7 +211,7 @@ public:
         return m_cache[cacheSet][m_replacementPolicy_ptr->
                             getVictim(candidates)->getWay()];
     }
-    Addr xyzCacheProbe(Addr address) const {
+    Addr xyzCacheProbe(Addr address) {
         
         // Just probe arbitrary line so that we can create a CRE
         if(!m_ziv) return cacheProbe(address);
@@ -220,15 +220,37 @@ public:
         // We now needs to select a cache line from Q
         // TODO: use a more intelligent replacement policy
         assert(Q.size() > 0);
+
         Addr victim = *Q.begin();
+        Tick last_access_time = curTick();
+        for (const Addr& Q_addr : Q) {
+            AbstractCacheEntry* entry = lookup(Q_addr);
+            assert(entry != nullptr);
+            Tick Q_access_time = entry->getLastAccess();
+            if (Q_access_time < last_access_time) {
+                last_access_time = Q_access_time;
+                victim = Q_addr;
+            }
+        }
+
         assert(isTagPresent(victim));
         return victim;
     }
-    Addr simpleProbe(Addr address) const {
+    Addr simpleProbe(Addr address) {
         if(!m_ziv) return cacheProbe(address);
         
-        // assert(Q.size() >= 0);
         Addr victim = *Q.begin();
+        Tick last_access_time = curTick();
+        for (const Addr& Q_addr : Q) {
+            AbstractCacheEntry* entry = lookup(Q_addr);
+            assert(entry != nullptr);
+            Tick Q_access_time = entry->getLastAccess();
+            if (Q_access_time < last_access_time) {
+                last_access_time = Q_access_time;
+                victim = Q_addr;
+            }
+        }
+
         assert(isTagPresent(victim));
         return victim;
     }
