@@ -26,7 +26,7 @@
 #include "params/XYZCache.hh"
 #include "sim/sim_object.hh"
 
-#define VB_SIZE 100 // number of cycles needed to complete WB = 100
+#define VB_SIZE 8 // should be larger than or equal to the number of cores
 
 namespace gem5 {
 
@@ -81,26 +81,15 @@ public:
     virtual const AbstractCacheEntry* lookup(Addr address) const;
     virtual void init();
 
-    void addToQ(Addr address) {
-        Q.insert(address);
-        addQAccessRecordsByAddr(address);
-    }
-
-    void removeFromQ(Addr address) {
-        Q.erase(address);
-        removeQAccessRecordsByAddr(address);
-    }
-
     virtual void addSharer(Addr address) {
         if(!m_ziv) return;
         assert(isTagPresent(address));
         if(Q.find(address) != Q.end()) {
-            removeFromQ(address);
+            Q.erase(address);
             assert(P.find(address) == P.end());
         }
         if(P.find(address) == P.end()) P[address] = 0;
         P[address] += 1;
-        addSharerRecords(address, curTick(), P[address]);
         totalPrivateCache += 1;
         markEntryNotCRE(address);
         reportInvariant(address);
@@ -113,13 +102,13 @@ public:
             CRECountPerSet[e->getSet()] -= 1;
             CRETotal -= 1;
         }
-        
+
     }
     virtual void markOwner(Addr address) {
         if(!m_ziv) return;
         assert(isTagPresent(address));
         if(Q.find(address) != Q.end()) {
-            removeFromQ(address);
+            Q.erase(address);
             assert(P.find(address) == P.end());
         }
         if(P.find(address) != P.end()) {
@@ -127,7 +116,6 @@ public:
             P[address] = 0;
         }
         P[address] = 1;
-        addSharerRecords(address, curTick(), 1);
         totalPrivateCache += 1;
 
         markEntryNotCRE(address);
@@ -142,10 +130,9 @@ public:
         assert(it->second > 0);
         it->second--;
         if(it->second == 0) {
-            addToQ(address);
+            Q.insert(address);
             P.erase(it);
         }
-        addSharerRecords(address, curTick(), it->second);
         totalPrivateCache -= 1;
         reportInvariant(address);
     }
@@ -157,8 +144,7 @@ public:
         assert(Q.find(address) == Q.end());
         totalPrivateCache -= it->second;
         P.erase(it);
-        addToQ(address);
-        addSharerRecords(address, curTick(), 0);
+        Q.insert(address);
         reportInvariant(address);
     }
     // must be called afterwards
@@ -169,8 +155,7 @@ public:
         assert(isTagPresent(address));
         assert(Q.find(address) != Q.end());
         assert(P.find(address) == P.end());
-        removeFromQ(address);
-        removeSharerRecordsByAddr(address);
+        Q.erase(address);
         auto e = lookup(address);
         auto row = e->getSet();
         auto way = e->getWay();
@@ -242,57 +227,6 @@ public:
                             getVictim(candidates)->getWay()];
     }
 
-    // functions to track access records by address
-    std::vector<Tick> getAccessRecordsByAddr(Addr address) {
-        auto entry = lookup(address);
-        if(entry) {
-            return entry->getAccessRecord();
-        } else {
-            return std::vector<Tick>();
-        }
-    }
-    
-    // functions to track sharer records by address
-    std::vector<std::pair<Tick, int>> getSharerRecordsByAddr (Addr address) {
-        auto sharers = Q_sharer_records.find(address);
-        if (sharers != Q_sharer_records.end()) {
-            return sharers->second;
-        } else {
-            return  std::vector<std::pair<Tick, int>>();
-        }
-    }
-    void addSharerRecords (Addr address, Tick tick, int num_sharers) {
-        Q_sharer_records[address].push_back({tick, num_sharers});
-    }
-    void removeSharerRecordsByAddr (Addr address) {
-        Q_sharer_records.erase(address);
-    }
-
-    // functions to track access records of all Q lines
-    AccessRecordsList<Addr, Tick> getQAccessRecords() {
-        return Q_access_records;
-    }
-    void addQAccessRecordsByAddr (Addr address) {
-        std::vector<Tick> records = getAccessRecordsByAddr(address);
-        for (const Tick& tick : records) {
-            Q_access_records.insert(address, tick);
-        }
-    }
-    void removeQAccessRecordsByAddr (Addr address) {
-        Q_access_records.erase(address);
-    }
-
-    // function to track access index by address
-    std::unordered_map<Addr, std::vector<int>> getQAccessIndices () {
-        std::unordered_map<Addr, std::vector<int>> Q_access_indices;
-        int index = (int) (Q_access_records.size() - 1);
-        for (const auto& record : Q_access_records) {
-            Q_access_indices[record.addr].push_back(index);
-            index -= 1;
-        }
-        return Q_access_indices;
-    }
-
     // functions to select Q victim for CRE
     Addr xyzCacheProbe(Addr address) {
         if(!m_ziv) return cacheProbe(address);
@@ -302,7 +236,9 @@ public:
         Addr victim = *Q.begin();
         Tick last_access_time = curTick();
         for (const Addr& Q_addr : Q) {
-            Tick Q_access_time = lookup(Q_addr)->getLastAccess();
+            AbstractCacheEntry* entry = lookup(Q_addr);
+            assert(entry != nullptr);
+            Tick Q_access_time = entry->getLastAccess();
             if (Q_access_time < last_access_time) {
                 last_access_time = Q_access_time;
                 victim = Q_addr;
@@ -319,7 +255,9 @@ public:
         Addr victim = *Q.begin();
         Tick last_access_time = curTick();
         for (const Addr& Q_addr : Q) {
-            Tick Q_access_time = lookup(Q_addr)->getLastAccess();
+            AbstractCacheEntry* entry = lookup(Q_addr);
+            assert(entry != nullptr);
+            Tick Q_access_time = entry->getLastAccess();
             if (Q_access_time < last_access_time) {
                 last_access_time = Q_access_time;
                 victim = Q_addr;
@@ -430,9 +368,6 @@ protected:
     // Store the Q lines for WB in VB
     std::unordered_map<Addr, int> m_VB_index;
     std::vector<VBEntry*> m_cache_VB;
-
-    std::unordered_map<Addr, std::vector<std::pair<Tick, int>>> Q_sharer_records;
-    AccessRecordsList<Addr, Tick> Q_access_records;
 
     std::vector<int> CRECountPerSet; // The number of CRE per set, initialized to be all zeros
     std::vector<std::vector<bool>> isCRE;
