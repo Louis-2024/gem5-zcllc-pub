@@ -82,7 +82,10 @@ class MyCacheSystem(RubySystem):
         # Create a single directory controller (Really the memory cntrl)
         # assert self.block_size_bytes == 64, "Block size must be 64B, but got {}. ({})".format(self.block_size_bytes, self.block_size_bytes - 64)
         private_total = MemorySize(l2size) * num_agents / self.block_size_bytes
-        l1s = [L0Cache(system, self, cpus_or_testers[i] if type_of_system == "cpu" else self, l1_assoc, size=l1size) for i in range(num_agents)]
+        self.xyzCacheMemory = XYZCache(size = l3size, assoc = l3_assoc, start_index_bit = self.getBlockSizeBits(system), 
+                                pri_tot = private_total, ziv=use_ziv, use_vi=use_vi)
+        
+        l1s = [L0Cache(system, self, cpus_or_testers[i] if type_of_system == "cpu" else self, l1_assoc, size=l1size, xyz_cache_memory = self.xyzCacheMemory) for i in range(num_agents)]
         self.controllers = \
             l1s + \
             [L1Cache(system, self, cpus_or_testers[i] if type_of_system == "cpu" else self, l2_assoc, size=l2size, l0=l1s[i], split_bus=split_bus, resp_bus_latency=resp_bus_latency) for i in range(num_agents)] + \
@@ -94,7 +97,8 @@ class MyCacheSystem(RubySystem):
                 assoc=l3_assoc, 
                 resp_bus_latency=resp_bus_latency, 
                 split_bus=split_bus, 
-                wb_buffer_size=wb_buffer_size)]  # 256 corresponds to 16kB L2, 64B CL
+                wb_buffer_size=wb_buffer_size,
+                xyz_cache_memory = self.xyzCacheMemory)]  # 256 corresponds to 16kB L2, 64B CL
             # 4 corresponds to 256B
 
         # Create one sequencer per CPU. In many systems this is more
@@ -154,7 +158,7 @@ class L0Cache(L0Cache_Controller):
         cls._version += 1 # Use count for this particular type
         return cls._version - 1
 
-    def __init__(self, system, ruby_system, cpu, assoc, size):
+    def __init__(self, system, ruby_system, cpu, assoc, size, xyz_cache_memory):
         """CPUs are needed to grab the clock domain and system is needed for
            the cache block size.
         """
@@ -173,6 +177,7 @@ class L0Cache(L0Cache_Controller):
 
 
         self.xyzStatsObject = XYZStatsObject()
+        self.xyzCacheMemory = xyz_cache_memory
         self.clk_domain = cpu.clk_domain
         self.send_evictions = self.sendEvicts(cpu)
         self.ruby_system = ruby_system
@@ -307,7 +312,7 @@ class DirController(Directory_Controller):
         cls._version += 1 # Use count for this particular type
         return cls._version - 1
 
-    def __init__(self, ruby_system, ranges, mem_ctrls, blksz, ncore, ncore_assoc, prv_tot, use_ziv, use_vi, size, use_write_through, enforce_roc, assoc, resp_bus_latency, split_bus, wb_buffer_size):
+    def __init__(self, ruby_system, ranges, mem_ctrls, blksz, ncore, ncore_assoc, prv_tot, use_ziv, use_vi, size, use_write_through, enforce_roc, assoc, resp_bus_latency, split_bus, wb_buffer_size, xyz_cache_memory):
         """ranges are the memory ranges assigned to this controller.
         """
         if len(mem_ctrls) > 1:
@@ -326,9 +331,7 @@ class DirController(Directory_Controller):
         self.cacheMemory = RubyCache(size = size,
                                assoc = ncore * ncore_assoc,
                                start_index_bit = blksz) # not used actually
-        self.xyzCacheMemory = XYZCache(size = size,
-                               assoc = assoc,
-                               start_index_bit = blksz, pri_tot = prv_tot, ziv=use_ziv, use_vi=use_vi)
+        self.xyzCacheMemory = xyz_cache_memory
         self.xyzStatsObject = XYZStatsObject()
         self.enforce_roc = enforce_roc
         self.sum_prv_capacity = prv_tot

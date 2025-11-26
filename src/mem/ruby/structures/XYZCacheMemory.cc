@@ -118,7 +118,7 @@ void XYZCacheMemory::deallocate(Addr address) {
     // This target location must be a CRE even in ZIV because no back-invalidation is there
     // the LLC state machine should never call deallocate
     assert(P.find(address) == P.end());
-    assert(Q.find(address) == Q.end()); // should be clean and safe to deallocate
+    assert(LLC_Only_dirty.find(address) == LLC_Only_dirty.end()); // should be clean and safe to deallocate
     DPRINTF(ZIVCache, "ZIV cache is deallocating %#x with cacheMemory method\n", address);
     CacheMemory::deallocate(address);
     // This must be after deallocate since it uses lookup to find the location
@@ -142,7 +142,7 @@ void XYZCacheMemory::reportInvariant(Addr address) {
     } else {
         DPRINTF(ZIVCache, "AFTER CHANGE>>P[%#x] = 0\n", address);
     }
-    DPRINTF(ZIVCache, "AFTER CHANGE>>Q[%#x]? = %d\n", address, Q.find(address) != Q.end());
+    DPRINTF(ZIVCache, "AFTER CHANGE>>Q[%#x]? = %d\n", address, LLC_Only_dirty.find(address) != LLC_Only_dirty.end());
 }
 void XYZCacheMemory::relocateVictim(AbstractCacheEntry* entry, Location targetLocation) {
     panic_if(!m_ziv, "Calling relocation when ziv is not available");
