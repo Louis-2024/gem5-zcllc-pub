@@ -1298,15 +1298,11 @@ MessageBuffer *responseFromMemory;
       markLLCDone;
   }
 
-  // A line in MI_m may still in the cache, and could be silently evicted 
-  // due to XYZ
-  transition(M, PutMOwnerWT, MI_m) {
-      // mark clean and create CRE (or Not?), like another event PutMOwnerCreateCRE
+  transition(M, PutMOwnerWT, LLC_Only_dirty_m) {
       guardOnlyInCache;
 
       copyDataToEntry;
 
-      // WB buffer operations
       incrementCacheEntryMemAckCount;
       allocateWBTBE;
       migrateCacheToWBCBE;
@@ -1323,8 +1319,6 @@ MessageBuffer *responseFromMemory;
       markCRE;
   }
 
-  // MI_m could be in WB or in $
-  // transition(MI_m, MemAck, LLC_Only_dirty) {
   transition(MI_m, MemAck) {
       decrementCacheEntryMemAckCountIfValid
       decrementTBEMemAckCount;
@@ -1336,7 +1330,7 @@ MessageBuffer *responseFromMemory;
       markLLCDoneIfNotSplitBus;
   }
 
-  transition(MI_m, LastMemAck, LLC_Only_dirty) {
+  transition(MI_m, LastMemAck, LLC_Only_clean) {
       decrementCacheEntryMemAckCountIfValid;
       // since we don't need WB anymore, no need to decrement
       deallocateWBTBE;
