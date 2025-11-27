@@ -68,7 +68,7 @@ public:
         // if(getNotSync() == 0) return true;
         return getNumBlocks() - getNotSync() >= pri_tot + delta_rhs;
     }
-    int getNotSync() const { return Q.size(); }
+    int getNotSync() const { return LLC_Only_dirty.size(); }
     int getPrv() const { return P.size(); }
     bool isRelocated(Addr lineAddress) {
         return relocation_table.find(lineAddress) != relocation_table.end();
@@ -84,11 +84,14 @@ public:
     virtual void addSharer(Addr address) {
         if(!m_ziv) return;
         assert(isTagPresent(address));
-        if(Q.find(address) != Q.end()) {
-            Q.erase(address);
-            assert(P.find(address) == P.end());
+        if(LLC_Only_dirty.find(address) != LLC_Only_dirty.end()) {
+            assert(P_dirty.find(address) == P_dirty.end());
+            LLC_Only_dirty.erase(address);
+            P_dirty.insert(address);
         }
-        if(P.find(address) == P.end()) P[address] = 0;
+        if(P.find(address) == P.end()) {
+            P[address] = 0;
+        }
         P[address] += 1;
         totalPrivateCache += 1;
         markEntryNotCRE(address);
@@ -102,14 +105,14 @@ public:
             CRECountPerSet[e->getSet()] -= 1;
             CRETotal -= 1;
         }
-
     }
     virtual void markOwner(Addr address) {
         if(!m_ziv) return;
         assert(isTagPresent(address));
-        if(Q.find(address) != Q.end()) {
-            Q.erase(address);
-            assert(P.find(address) == P.end());
+        if(LLC_Only_dirty.find(address) != LLC_Only_dirty.end()) {
+            assert(P_dirty.find(address) == P_dirty.end());
+            LLC_Only_dirty.erase(address);
+            P_dirty.insert(address);
         }
         if(P.find(address) != P.end()) {
             totalPrivateCache -= P[address];
@@ -124,14 +127,16 @@ public:
     virtual void removeSharer(Addr address) {
         if(!m_ziv) return;
         assert(isTagPresent(address));
-        assert(Q.find(address) == Q.end());
         auto it = P.find(address);
         assert(it != P.end());
         assert(it->second > 0);
         it->second--;
         if(it->second == 0) {
-            Q.insert(address);
             P.erase(it);
+            if (P_dirty.find(address) != P_dirty.end()) {
+                LLC_Only_dirty.insert(address);
+                P_dirty.erase(address);
+            }
         }
         totalPrivateCache -= 1;
         reportInvariant(address);
@@ -141,11 +146,22 @@ public:
         assert(isTagPresent(address));
         auto it = P.find(address);
         assert(it != P.end());
-        assert(Q.find(address) == Q.end());
         totalPrivateCache -= it->second;
         P.erase(it);
-        Q.insert(address);
+        if (P_dirty.find(address) != P_dirty.end()) {
+            LLC_Only_dirty.insert(address);
+            P_dirty.erase(address);
+        }
         reportInvariant(address);
+    }
+    void markDirty(Addr address) {
+        assert(P.find(address) != P.end());
+        if (P_dirty.find(address) == P_dirty.end()) {
+            P_dirty.insert(address);
+        }
+    }
+    bool checkDirty(Addr address) {
+        return (LLC_Only_dirty.find(address) != LLC_Only_dirty.end()) || (P_dirty.find(address) != P_dirty.end());
     }
     // must be called afterwards
     // called manually
@@ -153,9 +169,10 @@ public:
         if(!m_ziv) return;
         DPRINTF(ZIVCache, "ZIV: marking %#x ad CRE\n", address);
         assert(isTagPresent(address));
-        assert(Q.find(address) != Q.end());
         assert(P.find(address) == P.end());
-        Q.erase(address);
+        if(LLC_Only_dirty.find(address) != LLC_Only_dirty.end()) {
+            LLC_Only_dirty.erase(address);
+        }
         auto e = lookup(address);
         auto row = e->getSet();
         auto way = e->getWay();
@@ -164,7 +181,7 @@ public:
             CRECountPerSet[row] += 1;
             CRETotal += 1;
         }
-
+        
         reportInvariant(address);
     }
 
@@ -178,7 +195,7 @@ public:
         assert(isTagPresent(address));
         if(P.find(address) == P.end()) {
             return false;
-        } else if(Q.find(address) == Q.end()) {
+        } else if(LLC_Only_dirty.find(address) == LLC_Only_dirty.end()) {
             return false;
         } else {
             return true;
@@ -231,11 +248,11 @@ public:
     Addr xyzCacheProbe(Addr address) {
         if(!m_ziv) return cacheProbe(address);
         assert(!xyzCREAvail(address));
-        assert(Q.size() > 0);
+        assert(LLC_Only_dirty.size() > 0);
 
-        Addr victim = *Q.begin();
+        Addr victim = *LLC_Only_dirty.begin();
         Tick last_access_time = curTick();
-        for (const Addr& Q_addr : Q) {
+        for (const Addr& Q_addr : LLC_Only_dirty) {
             AbstractCacheEntry* entry = lookup(Q_addr);
             assert(entry != nullptr);
             Tick Q_access_time = entry->getLastAccess();
@@ -250,11 +267,11 @@ public:
     }
     Addr simpleProbe(Addr address) {
         if(!m_ziv) return cacheProbe(address);
-        assert(Q.size() > 0);
-
-        Addr victim = *Q.begin();
+        assert(LLC_Only_dirty.size() > 0);
+        
+        Addr victim = *LLC_Only_dirty.begin();
         Tick last_access_time = curTick();
-        for (const Addr& Q_addr : Q) {
+        for (const Addr& Q_addr : LLC_Only_dirty) {
             AbstractCacheEntry* entry = lookup(Q_addr);
             assert(entry != nullptr);
             Tick Q_access_time = entry->getLastAccess();
@@ -364,7 +381,8 @@ protected:
     std::unordered_map<Addr, Location> relocation_table;
     // Store the number of sharers for cache lines cached
     std::unordered_map<Addr, int> P; // the P set for maintaining P
-    std::unordered_set<Addr> Q; // the lines that are dirty but not privately cached
+    std::unordered_set<Addr> P_dirty;
+    std::unordered_set<Addr> LLC_Only_dirty;
     // Store the Q lines for WB in VB
     std::unordered_map<Addr, int> m_VB_index;
     std::vector<VBEntry*> m_cache_VB;

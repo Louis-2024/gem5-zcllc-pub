@@ -51,8 +51,9 @@ MessageBuffer *responseFromMemory;
       I, AccessPermission:Read_Write,  desc="Invalid in the caches.";
       S, AccessPermission:Read_Only,   desc="At least one cache has the blk";
       M, AccessPermission:Invalid,     desc="A cache has the block in M";
-      LLCOnly, AccessPermission:Read_Write, desc="In LLC only";
-      LLCOnly_m, AccessPermission:Read_Only, desc="Waiting for memory ACK in LLC";
+      LLC_Only_clean, AccessPermission:Read_Write, desc="In LLC only, clean";
+      LLC_Only_dirty, AccessPermission:Read_Write, desc="In LLC only, dirty";
+      LLC_Only_dirty_m, AccessPermission:Read_Only, desc="Waiting for memory ACK";
 
       // Transient states
       S_D, AccessPermission:Busy,      desc="Moving to S, but need data";
@@ -82,20 +83,20 @@ MessageBuffer *responseFromMemory;
       Replacement,  desc="Triggered when block is chosen as victim";
       ReplacementReorder,  desc="Triggered when block is chosen as victim";
 
-      // Writeback requests from the cache
-      PutSNotLast,  desc="PutS and the block has other sharers";
-      PutSNotLastNonSharer,  desc="PutS and the block has other sharers";
-      PutSLast,     desc="PutS and the block has no other sharers";
-      PutSLastWT,     desc="PutS and write through";
-      PutMOwner,    desc="Dirty data writeback from the owner";
-      PutMOwnerWT,    desc="Dirty data writeback from the owner";
-      PutMNonOwner, desc="Dirty data writeback from non-owner";
-      
-      // Cache responses
-      Data,         desc="Response to fwd request with data";
-      Sync,         desc="Writeback LLC Only";
-      Sync_VB,      desc="Writeback LLC through VB Only";
-      InvAck,       desc="Ack from Core, for replacement of shared line";
+        // Writeback requests from the cache
+        PutSNotLast,  desc="PutS and the block has other sharers";
+        PutSNotLastNonSharer,  desc="PutS and the block has other sharers";
+        PutSLast_clean,     desc="PutS and the block has no other sharers, clean";
+        PutSLast_dirty,     desc="PutS and the block has no other sharers, dirty";
+
+        PutMOwner,    desc="Dirty data writeback from the owner";
+        PutMNonOwner, desc="Dirty data writeback from non-owner";
+
+        // Cache responses
+        Data,         desc="Response to fwd request with data";
+        Sync,         desc="Writeback LLC Only";
+        Sync_VB,      desc="Writeback LLC through VB Only";
+        InvAck,       desc="Ack from Core, for replacement of shared line";
 
       // From Memory
       MemData,      desc="Data from memory";
@@ -213,7 +214,7 @@ MessageBuffer *responseFromMemory;
             assert(cache_entry.Sharers.count() == 0);
         }
         cache_entry.DirState := state;
-        if (state == State:I || state == State:LLCOnly)  {
+        if (state == State:I || state == State:LLC_Only_dirty || state == State:LLC_Only_clean)  {
             assert(cache_entry.Owner.count() == 0);
             assert(cache_entry.Sharers.count() == 0);
         }
@@ -904,7 +905,7 @@ MessageBuffer *responseFromMemory;
   // The following cases cannot be handled within a slot
   
   // Can be only on...
-  transition(LLCOnly, Replacement, LLCOnly_m) {
+  transition(LLC_Only_dirty, Replacement, LLC_Only_dirty_m) {
     nozcllcguard;
     recReplLLC;
       // allocteROCTBE;
@@ -923,7 +924,7 @@ MessageBuffer *responseFromMemory;
       markCRE;
   }
 
-  transition(LLCOnly_m, {Replacement, ReplacementReorder}) {
+  transition(LLC_Only_dirty_m, {Replacement, ReplacementReorder}) {
       guardSplitBus;
       fwdToOrderFromReq;
       popRequestQueue;
@@ -932,7 +933,7 @@ MessageBuffer *responseFromMemory;
       // stall;
   }
   // try again...
-  transition({LLCOnly, I, S, M, S_m, LLCOnly_m, M_m, II_m, II_dm}, Order) {
+  transition({LLC_Only_dirty, LLC_Only_clean, I, S, M, S_m, LLC_Only_dirty_m, M_m, II_m, II_dm}, Order) {
       fwdToOrderFromReq;
       popRequestQueue;
       
@@ -954,11 +955,8 @@ MessageBuffer *responseFromMemory;
       
       markLLCDoneIfSplitBus;
   }
-
-
-
   
-  transition(LLCOnly, Sync, LLCOnly_m) {
+  transition(LLC_Only_dirty, Sync, LLC_Only_dirty_m) {
       guardOnlyInCache;
       zcllcguard;
 
@@ -973,7 +971,7 @@ MessageBuffer *responseFromMemory;
       delayPutSmarkLLCDone;
   }
   
-  transition(LLCOnly, GetS, S) {
+  transition({LLC_Only_clean, LLC_Only_dirty}, GetS, S) {
     deallocateROCTBE;
     addReqToSharers
     xyzAddToSharers;
@@ -983,7 +981,7 @@ MessageBuffer *responseFromMemory;
     markLLCDone_WaitForDataIfNonSplit;
   }
 
-  transition(LLCOnly, GetM, M) {
+  transition({LLC_Only_clean, LLC_Only_dirty}, GetM, M) {
     guardOnlyInCache;
 
     deallocateROCTBE;
@@ -1033,7 +1031,7 @@ MessageBuffer *responseFromMemory;
       markLLCDone_WaitForDataIfNonSplit;
   }
 
-  transition(I, {PutSNotLast, PutSLast, PutMNonOwner}) {
+  transition(I, {PutSNotLast, PutSLast_clean, PutSLast_dirty, PutMNonOwner}) {
       sendPutAck;
       popRequestQueue;
       markLLCDone;
@@ -1090,8 +1088,7 @@ MessageBuffer *responseFromMemory;
       markLLCDone_WaitForDataIfNonSplit;
   }
 
-    transition({LLCOnly, LLCOnly_m}, PutMNonOwner) {
-
+    transition({LLC_Only_dirty, LLC_Only_dirty_m}, PutMNonOwner) {
       xyzRemoveFromSharers;
       removeReqFromSharers;
       sendPutAck;
@@ -1115,7 +1112,7 @@ MessageBuffer *responseFromMemory;
       popRequestQueue;
       markLLCDone;
   }
-    transition({S, S_D, SS_m, S_m, LLCOnly, II_m}, {PutSNotLastNonSharer}) {
+    transition({S, S_D, SS_m, S_m, LLC_Only_clean, LLC_Only_dirty, II_m}, {PutSNotLastNonSharer}) {
         // we actually don't need it...
       removeReqFromSharers;
       sendPutAck;
@@ -1125,9 +1122,17 @@ MessageBuffer *responseFromMemory;
       markLLCDoneIfNonDelayAndNonSplit;
   }
   
+  transition(S, PutSLast_clean, LLC_Only_clean) {
+      xyzRemoveFromSharers;
+      removeReqFromSharers;
+      sendPutAck;
+      popRequestQueue;
+      markCRE;
 
+      markLLCDone;
+  }
 
-  transition(S, PutSLast, LLCOnly) { // TODO: To LLCOnly
+  transition(S, PutSLast_dirty, LLC_Only_dirty) {
       xyzRemoveFromSharers;
       removeReqFromSharers;
       sendPutAck;
@@ -1135,29 +1140,8 @@ MessageBuffer *responseFromMemory;
 
       markLLCDone;
   }
-transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
-      // If we want to markCRE, we need to write it
 
-      guardOnlyInCache;
-
-      // WB buffer ops
-      incrementCacheEntryMemAckCount;
-      allocateWBTBE;
-      migrateCacheToWBCBE; 
-      
-      sendLLCDataToMem;
-      xyzRemoveFromSharers;
-      removeReqFromSharers;
-      
-      sendPutAck;
-      popRequestQueue;
-
-      markLLCDoneIfSplitBus;
-
-      markCRE;
-  }
-
-  transition(LLCOnly_m, LastMemAck, LLCOnly) {
+  transition(LLC_Only_dirty_m, LastMemAck, LLC_Only_clean) {
 
     decrementCacheEntryMemAckCountIfValid;
     decrementTBEMemAckCount;
@@ -1168,15 +1152,10 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
     popMemQueue;
     kd_wakeUpDependents;
 
-    // markLLCDone;
-
-    // The following mark is used exclusive for shared bus, and (Replacement, {LLCOnly, S})
-    // to indicate that a replacement is finished
     markLLCDoneIfNotSplitBus;
     clearPutSDelayMarkDone;
   }
-
-  transition(LLCOnly_m, MemAck) {
+  transition(LLC_Only_dirty_m, MemAck) {
     guardSplitBus;
 
     decrementCacheEntryMemAckCountIfValid;
@@ -1187,7 +1166,7 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
     
   }
 
-  transition({LLCOnly, I, S, M, S_m, LLCOnly_m, M_m, II_m, II_dm}, LastMemAck_VB) {
+  transition({LLC_Only_dirty, LLC_Only_clean, I, S, M, S_m, LLC_Only_dirty_m, M_m, II_m, II_dm}, LastMemAck_VB) {
     popMemQueue;
     kd_wakeUpDependents;
     
@@ -1195,7 +1174,7 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
     clearPutSDelayMarkDone;
   }
 
-  transition({LLCOnly, I, S, M, S_m, LLCOnly_m, M_m, II_m, II_dm}, MemAck_VB) {
+  transition({LLC_Only_dirty, LLC_Only_clean, I, S, M, S_m, LLC_Only_dirty_m, M_m, II_m, II_dm}, MemAck_VB) {
     popMemQueue;
     kd_wakeUpDependents;
   }
@@ -1322,7 +1301,7 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
     markLLCDoneIfSplitBus;
   }
 
-  transition({M, M_m, MI_m}, {PutSNotLast, PutSLast, PutSNotLastNonSharer}) {
+  transition({M, M_m, MI_m}, {PutSNotLast, PutSLast_clean, PutSLast_dirty, PutSNotLastNonSharer}) {
       sendPutAck;
       popRequestQueue;
 
@@ -1336,7 +1315,7 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
       markLLCDone;
   }
 
-  transition(M, PutMOwner, LLCOnly) {
+  transition(M, PutMOwner, LLC_Only_dirty) {
       // mark clean and create CRE (or Not?), like another event PutMOwnerCreateCRE
       copyDataToEntry;
       // sendDataToMem;
@@ -1347,33 +1326,8 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
       markLLCDone;
   }
 
-  // A line in MI_m may still in the cache, and could be silently evicted 
-  // due to XYZ
-  transition(M, PutMOwnerWT, MI_m) {
-      // mark clean and create CRE (or Not?), like another event PutMOwnerCreateCRE
-      guardOnlyInCache;
-
-      copyDataToEntry;
-
-      // WB buffer operations
-      incrementCacheEntryMemAckCount;
-      allocateWBTBE;
-      migrateCacheToWBCBE;
-
-      sendDataToMem;
-
-      xyzRemoveFromSharers;
-      clearOwner;
-      sendPutAck;
-      popRequestQueue;
-
-      markLLCDoneIfSplitBus;
-
-      markCRE;
-  }
-
   // MI_m could be in WB or in $
-  // transition(MI_m, MemAck, LLCOnly) {
+  // transition(MI_m, MemAck, LLC_Only_dirty) {
   transition(MI_m, MemAck) {
       decrementCacheEntryMemAckCountIfValid
       decrementTBEMemAckCount;
@@ -1385,7 +1339,7 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
       markLLCDoneIfNotSplitBus;
   }
 
-  transition(MI_m, LastMemAck, LLCOnly) {
+  transition(MI_m, LastMemAck, LLC_Only_dirty) {
       decrementCacheEntryMemAckCountIfValid;
       // since we don't need WB anymore, no need to decrement
       deallocateWBTBE;
@@ -1414,7 +1368,7 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
     popMemQueue;
   }
 
-  transition(LLCOnly, LastMemAck) {
+  transition({LLC_Only_clean, LLC_Only_dirty}, LastMemAck) {
     guardSplitBus;
     guardOnlyInCache;
     
@@ -1435,7 +1389,7 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
       markLLCDone;
   }
 
-  transition(S_D, PutSLast) {
+  transition(S_D, {PutSLast_dirty, PutSLast_clean}) {
       xyzRemoveFromSharers;
       removeReqFromSharers;
       sendPutAck;
@@ -1456,7 +1410,7 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
       popMemQueue;
   }*/
 
-  transition(LLCOnly_m, Sync) {
+  transition(LLC_Only_dirty_m, Sync) {
       // stall;
       stall_request_in;
   }
@@ -1496,7 +1450,7 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
       // stall_request_in;
   }
 
-  transition(LLCOnly_m, GetM, M) {
+  transition(LLC_Only_dirty_m, GetM, M) {
     guardSplitBus;
     guardInWBTBE;
 
@@ -1514,7 +1468,7 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
     markLLCDone;
   }
 
-  transition(LLCOnly_m, GetS, S) {
+  transition(LLC_Only_dirty_m, GetS, S) {
     guardSplitBus;
     guardInWBTBE;
 
@@ -1568,7 +1522,7 @@ transition(S, PutSLastWT, LLCOnly_m) { // TODO: To LLCOnly
     markLLCDone;
   }
   
-  transition(LLCOnly, Sync_VB, I) {
+  transition(LLC_Only_dirty, Sync_VB, I) {
     guardOnlyInCache;
     zcllcguard;
 

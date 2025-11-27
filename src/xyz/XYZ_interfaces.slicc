@@ -8,8 +8,8 @@ structure (TDMSwitch, external = "yes") {
 }
 
 structure (XYZStatsObject, external = "yes") {
-    void recordPutS(bool);
-    void recordPutM(bool);
+    // void recordPutS(bool);
+    // void recordPutM(bool);
 
     void recordReplShared();
     void recordReplOwned();
@@ -76,4 +76,7 @@ structure (XYZCacheMemory, external = "yes") {
   void profileDemandMiss();
   void profilePrefetchHit();
   void profilePrefetchMiss();
+
+  void markDirty(Addr);
+  bool checkDirty(Addr);
 }

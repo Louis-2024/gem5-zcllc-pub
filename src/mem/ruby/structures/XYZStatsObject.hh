@@ -62,22 +62,22 @@ namespace gem5::ruby {
             total_repl++;
             total_repl_llc++;
         }
-        void recordPutM(bool is_write_through) {
-            total_put++;
-            total_putm++;
-            if(is_write_through) {
-                total_putm_as_wt++;
-                total_put_as_wt++;
-            }
-        };
-        void recordPutS(bool is_write_through) {
-            total_put++;
-            total_puts++;
-            if(is_write_through) {
-                total_puts_as_wt++;
-                total_put_as_wt++;
-            }
-        };
+        // void recordPutM(bool is_write_through) {
+        //     total_put++;
+        //     total_putm++;
+        //     if(is_write_through) {
+        //         total_putm_as_wt++;
+        //         total_put_as_wt++;
+        //     }
+        // };
+        // void recordPutS(bool is_write_through) {
+        //     total_put++;
+        //     total_puts++;
+        //     if(is_write_through) {
+        //         total_puts_as_wt++;
+        //         total_put_as_wt++;
+        //     }
+        // };
     };
 };
 
