@@ -20,8 +20,9 @@ PYTHONPATH="$PWD/configs:$PWD/build/X86_LC_MSI/python" ./build/X86_LC_MSI/gem5.f
 
 # PYTHONPATH="$PWD/configs:$PWD/build/X86_LC_MSI/python" ./build/X86_LC_MSI/gem5.fast \
 #     configs/xyz/simple_ruby.py --wc --ncore 4 --use-ziv --use-vi --l1-size 2kB --l2-size 8kB --l3-size 128kB \
-#    --program /gem5/Splash-3/codes/apps/water-spatial/WATER-SPATIAL --cwd /gem5/Splash-3/codes/apps/water-spatial \
-#    --input-file /gem5/Splash-3/codes/apps/water-spatial/inputs/n512-p4
+#     --program /gem5/Splash-3/codes/apps/raytrace/RAYTRACE \
+#     --cwd /gem5/Splash-3/codes/apps/raytrace \
+#     --args "-p4 /gem5/Splash-3/codes/apps/raytrace/inputs/teapot.env"
 
 # PYTHONPATH="$PWD/configs:$PWD/build/X86_LC_MSI/python" ./build/X86_LC_MSI/gem5.fast \
 #     configs/xyz/simple_ruby.py --wc --ncore 4 --use-ziv --use-vi --l1-size 2kB --l2-size 8kB --l3-size 128kB \
