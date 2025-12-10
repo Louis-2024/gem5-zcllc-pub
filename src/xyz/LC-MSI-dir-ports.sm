@@ -252,7 +252,9 @@
                           trigger(Event:PutMOwnerWT, in_msg.addr, e, tbe);
                       }
                   } else {
-                      assert((is_invalid(e)) && (!xyzCacheMemory.ziv_enabled()));
+                      if(is_invalid(e)) {
+                          assert(xyzCacheMemory.ziv_enabled() == false);
+                      }
                       DPRINTF(RubySlicc, "PutMNonOwner for %#x\n", in_msg.addr);
                       trigger(Event:PutMNonOwner, in_msg.addr, e, tbe);
                   }
