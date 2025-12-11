@@ -25,7 +25,6 @@ parser.add_argument('--disable-roc', help='Disable ROC', default=False, action="
 parser.add_argument('--relax-vi', help='VI relaxation', default=0)
 parser.add_argument('--wc', help='Work conserving round-robin', default=False, action="store_true")
 parser.add_argument('--split-bus', help='Split response bus', default=False, action="store_true")
-parser.add_argument('--write-through', help='Whether bypassing the LLC', default=False, action="store_true")
 parser.add_argument('--program', type=str, help='Program to run')
 parser.add_argument('--l1-size', type=str, help='L1 Size', default='4kB')
 parser.add_argument('--l1-assoc', type=int, help='L1 Associativity', default=2)
@@ -107,7 +106,6 @@ system.caches.setup(system, system.cpu if not args.ruby_test else system.tester,
     use_vi=args.use_vi,
     type_of_system=system_type,
     use_wc=args.wc,
-    use_write_through=args.write_through,
     enforce_roc=not args.disable_roc,
     subslot_opt=args.subslot_opt,
     split_bus=args.split_bus,
