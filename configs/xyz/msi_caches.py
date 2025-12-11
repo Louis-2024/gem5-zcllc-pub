@@ -43,7 +43,7 @@ class MyCacheSystem(RubySystem):
 
         super(MyCacheSystem, self).__init__()
 
-    def setup(self, system, cpus_or_testers, mem_ctrls, l1size, l1_assoc, l2size, l3size, l2_assoc, l3_assoc, use_ziv, use_vi, type_of_system, use_wc, use_write_through, enforce_roc, **kwargs):
+    def setup(self, system, cpus_or_testers, mem_ctrls, l1size, l1_assoc, l2size, l3size, l2_assoc, l3_assoc, use_ziv, use_vi, type_of_system, use_wc, enforce_roc, **kwargs):
         """Set up the Ruby cache subsystem. Note: This can't be done in the
            constructor because many of these items require a pointer to the
            ruby system (self). This causes infinite recursion in initialize()
@@ -57,8 +57,6 @@ class MyCacheSystem(RubySystem):
         slot_width = kwargs['slot_width']
         llc_latency = kwargs['llc_latency']
         
-        # assert not use_write_through, "Write though not supported"
-        # assert not use_wc, "WCRR not supported"
         assert type_of_system in ["tester", "cpu"]
         # Ruby's global network.
         self.network = MyNetwork(self)
@@ -92,7 +90,7 @@ class MyCacheSystem(RubySystem):
             [DirController(self,
             system.mem_ranges,
             mem_ctrls,
-            self.getBlockSizeBits(system), num_agents, l2_assoc, private_total, use_ziv, use_vi, size=l3size, use_write_through=use_write_through, 
+            self.getBlockSizeBits(system), num_agents, l2_assoc, private_total, use_ziv, use_vi, size=l3size, 
                 enforce_roc=enforce_roc, 
                 assoc=l3_assoc, 
                 resp_bus_latency=resp_bus_latency, 
@@ -312,7 +310,7 @@ class DirController(Directory_Controller):
         cls._version += 1 # Use count for this particular type
         return cls._version - 1
 
-    def __init__(self, ruby_system, ranges, mem_ctrls, blksz, ncore, ncore_assoc, prv_tot, use_ziv, use_vi, size, use_write_through, enforce_roc, assoc, resp_bus_latency, split_bus, wb_buffer_size, xyz_cache_memory):
+    def __init__(self, ruby_system, ranges, mem_ctrls, blksz, ncore, ncore_assoc, prv_tot, use_ziv, use_vi, size, enforce_roc, assoc, resp_bus_latency, split_bus, wb_buffer_size, xyz_cache_memory):
         """ranges are the memory ranges assigned to this controller.
         """
         if len(mem_ctrls) > 1:
@@ -335,7 +333,6 @@ class DirController(Directory_Controller):
         self.xyzStatsObject = XYZStatsObject()
         self.enforce_roc = enforce_roc
         self.sum_prv_capacity = prv_tot
-        self.write_through = use_write_through
         self.wb_buffer_size = 1 if not split_bus else wb_buffer_size
         # Connect this directory to the memory side.
         self.memory = mem_ctrls[0].port
