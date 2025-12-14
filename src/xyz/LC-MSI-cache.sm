@@ -742,11 +742,11 @@ machine(MachineType:L1Cache, "LC-MSI cache")
   }
   action(tic, "dtic", desc="Start timing") {
     if(TBEs.cnt() == 0) {
-        xyzStatsObject.tic();
+        xyzStatsObject.tic(address);
     }
   }
   action(toc, "dtoc", desc="Start timing") {
-    xyzStatsObject.toc();
+    xyzStatsObject.toc(address);
   }
   action(forwardInvToL0, "fil", desc="") {
     peek(forward_in, RequestMsg) {

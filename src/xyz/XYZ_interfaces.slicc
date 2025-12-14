@@ -14,8 +14,8 @@ structure (XYZStatsObject, external = "yes") {
     void recordReplShared();
     void recordReplOwned();
     void recordReplLLC();
-    void tic();
-    void toc();
+    void tic(Addr);
+    void toc(Addr);
 }
 
 structure (XYZCacheMemory, external = "yes") {

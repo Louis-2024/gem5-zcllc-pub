@@ -484,11 +484,11 @@ machine(MachineType:L0Cache, "LC-MSI cache")
   }
   action(tic, "dtic", desc="Start timing") {
     if(TBEs.cnt() == 0) {
-        xyzStatsObject.tic();
+        xyzStatsObject.tic(address);
     }
   }
   action(toc, "dtoc", desc="Start timing") {
-    xyzStatsObject.toc();
+    xyzStatsObject.toc(address);
   }
   transition(I, Load, IS_D) {
     tic;
