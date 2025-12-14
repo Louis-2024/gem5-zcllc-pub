@@ -36,12 +36,14 @@ namespace gem5::ruby {
 
         uint64_t wcl_bound;
 
-        void tic() {
+        void tic(Addr address) {
             w = curCycle();
+            DPRINTF(XYZInfo, "Start timing %#x at: %lld\n", address, w);
         }
 
-        void toc() {
+        void toc(Addr address) {
             latencies.sample(curCycle() - w);
+            DPRINTF(XYZInfo, "Finish timing %#x at: %lld\n", address, curCycle());
             DPRINTF(XYZInfo, "Samping latency: %lld\n", curCycle() - w);
             if(curCycle() - w > wcl_bound) {
                 DPRINTF(XYZInfo, "Worst case latency bound reached: %lld\n", curCycle() - w);
