@@ -45,7 +45,7 @@ CheckTable::CheckTable(int _num_writers, int _num_readers, RubyTester* _tester)
     Addr physical = 0;
 
     const int size1 = 32;
-    const int size2 = 100;
+    const int size2 = 16384;
 
     DPRINTF(RubyTest, "Adding false sharing checks\n");
     // The first set is to get some false sharing

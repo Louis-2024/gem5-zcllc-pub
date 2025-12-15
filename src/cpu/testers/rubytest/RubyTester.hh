@@ -46,7 +46,7 @@
 #include <string>
 #include <vector>
 
-#include "cpu/testers/rubytest/SyntheticBenchmark.hh"
+#include "cpu/testers/rubytest/CheckTable.hh"
 #include "mem/packet.hh"
 #include "mem/port.hh"
 #include "mem/ruby/common/SubBlock.hh"
@@ -135,7 +135,7 @@ class RubyTester : public ClockedObject
     RubyTester(const RubyTester& obj);
     RubyTester& operator=(const RubyTester& obj);
 
-    SyntheticBenchmark* m_checkTable_ptr;
+    CheckTable* m_checkTable_ptr;
     std::vector<Cycles> m_last_progress_vector;
 
     int m_num_cpus;

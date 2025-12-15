@@ -44,6 +44,5 @@ Source('RubyTester.cc')
 Source('WCLRubyTester.cc')
 Source('Check.cc')
 Source('CheckTable.cc')
-Source('SyntheticBenchmark.cc')
 
 DebugFlag('RubyTest')

@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "cpu/testers/rubytest/SyntheticBenchmark.hh"
+#include "cpu/testers/rubytest/CheckTable.hh"
 #include "cpu/testers/rubytest/RubyTester.hh"
 #include "mem/packet.hh"
 #include "mem/port.hh"

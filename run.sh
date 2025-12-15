@@ -33,4 +33,4 @@ PYTHONPATH="$PWD/configs:$PWD/build/X86_LC_MSI/python" ./build/X86_LC_MSI/gem5.f
  
 # PYTHONPATH="$PWD/configs:$PWD/build/X86_LC_MSI/python" ./build/X86_LC_MSI/gem5.fast \
 #     configs/xyz/simple_ruby.py --wc --subslot-opt --ruby-test --ncore 4 --use-ziv --use-vi --l1-size 2kB --l2-size 8kB --l3-size 128kB \
-#     --nreq 10000
+#     --nreq 20000
