@@ -2,10 +2,10 @@ rm -rf m5out
 
 # quick tests
 
-# PYTHONPATH="$PWD/configs:$PWD/build/X86_LC_MSI/python" ./build/X86_LC_MSI/gem5.opt --debug-flags=ZIVCache --debug-file=ziv.log --debug-start=0 \
-#     configs/xyz/simple_ruby.py --wc --subslot-opt --ncore 4 --use-ziv --use-vi --l1-size 2kB --l2-size 8kB --l3-size 128kB \
-#     --program /gem5/Splash-3/codes/kernels/cholesky/CHOLESKY --cwd /gem5/Splash-3/codes/kernels/cholesky --args "-p4 -B32 -C65536" \
-#     --input-file /gem5/Splash-3/codes/kernels/cholesky/inputs/tk14.O
+PYTHONPATH="$PWD/configs:$PWD/build/X86_LC_MSI/python" ./build/X86_LC_MSI/gem5.opt --debug-flags=ZIVCache --debug-file=ziv.log --debug-start=0 \
+    configs/xyz/simple_ruby.py --wc --subslot-opt --ncore 4 --use-ziv --use-vi --l1-size 2kB --l2-size 8kB --l3-size 128kB \
+    --program /gem5/Splash-3/codes/kernels/cholesky/CHOLESKY --cwd /gem5/Splash-3/codes/kernels/cholesky --args "-p4 -B32 -C65536" \
+    --input-file /gem5/Splash-3/codes/kernels/cholesky/inputs/tk14.O
 
 # PYTHONPATH="$PWD/configs:$PWD/build/X86_LC_MSI/python" ./build/X86_LC_MSI/gem5.opt --debug-flags=ZIVCache --debug-file=ziv.log --debug-start=0 \
 #     configs/xyz/simple_ruby.py --wc --subslot-opt --ncore 4 --use-ziv --use-vi --l1-size 2kB --l2-size 8kB --l3-size 128kB \
@@ -31,6 +31,6 @@ rm -rf m5out
 
 # synthetic test
  
-# PYTHONPATH="$PWD/configs:$PWD/build/X86_LC_MSI/python" ./build/X86_LC_MSI/gem5.opt  --debug-flags=TDM --debug-file=ziv.log --debug-start=0 \
+# PYTHONPATH="$PWD/configs:$PWD/build/X86_LC_MSI/python" ./build/X86_LC_MSI/gem5.opt  --debug-flags=ZIVCache --debug-file=ziv.log --debug-start=0 \
 #     configs/xyz/simple_ruby.py --wc --subslot-opt --ruby-test --ncore 4 --use-ziv --use-vi --l1-size 2kB --l2-size 8kB --l3-size 128kB \
-#     --nreq 10000
+#     --nreq 20000
