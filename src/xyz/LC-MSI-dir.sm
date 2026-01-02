@@ -76,9 +76,9 @@ MessageBuffer *responseFromMemory;
   enumeration(Event, desc="Directory events") {
       // Data requests from the cache
       GetS,         desc="Request for read-only data from cache";
-      GetS_VB,         desc="Request for read-only data in VB from cache";
+      GetS_WB,         desc="Request for read-only data in WB from cache";
       GetM,         desc="Request for read-write data from cache";
-      GetM_VB,         desc="Request for read-write data in VB from cache";
+      GetM_WB,         desc="Request for read-write data in WB from cache";
       Replacement,  desc="Triggered when block is chosen as victim";
       ReplacementReorder,  desc="Triggered when block is chosen as victim";
 
@@ -94,15 +94,15 @@ MessageBuffer *responseFromMemory;
         // Cache responses
         Data,         desc="Response to fwd request with data";
         Sync,         desc="Writeback LLC Only";
-        Sync_VB,      desc="Writeback LLC through VB Only";
+        Sync_WB,      desc="Writeback LLC through WB Only";
         InvAck,       desc="Ack from Core, for replacement of shared line";
 
       // From Memory
       MemData,      desc="Data from memory";
       MemAck,       desc="Ack from memory that write is complete";
       LastMemAck,       desc="Ack from memory that write is complete";
-      MemAck_VB, desc="";
-      LastMemAck_VB, desc="";
+      MemAck_WB, desc="";
+      LastMemAck_WB, desc="";
 
       // Ordering
       Order,        desc="Order what every request";
@@ -887,12 +887,12 @@ MessageBuffer *responseFromMemory;
     assert(is_valid(tbe));
   }
 
-  action(relocateCacheBlockToVB, "rVB", desc="Relocate Q cache block in LLC to VB for WB") {
-    xyzCacheMemory.relocateVictimToVB(cache_entry, machineID, cache_entry.MemAckOutstanding);
-    DPRINTF(RubySlicc, "VB size = %d \n", xyzCacheMemory.getVBSize());
+  action(relocateCacheBlockToWB, "rWB", desc="Relocate Q cache block in LLC to WB for WB") {
+    xyzCacheMemory.relocateVictimToWB(cache_entry, machineID, cache_entry.MemAckOutstanding);
+    DPRINTF(RubySlicc, "WB size = %d \n", xyzCacheMemory.getWBSize());
   }
   
-  action(getDataBlkFromVB, "gDfVB", desc="Get the DataBlk from VB, and assign it to cache entry") {
+  action(getDataBlkFromWB, "gDfWB", desc="Get the DataBlk from WB, and assign it to cache entry") {
     cache_entry.DataBlk := xyzCacheMemory.getDataBlkByIndex(xyzCacheMemory.getIndexByAddr(address));
   }
 
@@ -1004,26 +1004,26 @@ MessageBuffer *responseFromMemory;
       markLLCDoneIfSplitBus;
   }
 
-  transition(I, GetS_VB, S) {
+  transition(I, GetS_WB, S) {
       deallocateROCTBE;
       allocateCacheBlock;
       addReqToSharers;
       xyzAddToSharers;
 
-      getDataBlkFromVB;
+      getDataBlkFromWB;
       sendLLCToReq;
       popRequestQueue;
 
       markLLCDone_WaitForDataIfNonSplit;
   }
 
-  transition(I, GetM_VB, M) {
+  transition(I, GetM_WB, M) {
       deallocateROCTBE;
       allocateCacheBlock;
       setOwner;
       xyzSetOwner;
 
-      getDataBlkFromVB;
+      getDataBlkFromWB;
       sendLLCToReq;
       popRequestQueue;
 
@@ -1165,7 +1165,7 @@ MessageBuffer *responseFromMemory;
     
   }
 
-  transition({LLC_Only_dirty, LLC_Only_clean, I, S, M, S_m, LLC_Only_dirty_m, M_m, II_m, II_dm}, LastMemAck_VB) {
+  transition({LLC_Only_dirty, LLC_Only_clean, I, S, M, S_m, LLC_Only_dirty_m, M_m, II_m, II_dm}, LastMemAck_WB) {
     popMemQueue;
     kd_wakeUpDependents;
     
@@ -1173,7 +1173,7 @@ MessageBuffer *responseFromMemory;
     clearPutSDelayMarkDone;
   }
 
-  transition({LLC_Only_dirty, LLC_Only_clean, I, S, M, S_m, LLC_Only_dirty_m, M_m, II_m, II_dm}, MemAck_VB) {
+  transition({LLC_Only_dirty, LLC_Only_clean, I, S, M, S_m, LLC_Only_dirty_m, M_m, II_m, II_dm}, MemAck_WB) {
     popMemQueue;
     kd_wakeUpDependents;
   }
@@ -1521,11 +1521,11 @@ MessageBuffer *responseFromMemory;
     markLLCDone;
   }
   
-  transition(LLC_Only_dirty, Sync_VB, I) {
+  transition(LLC_Only_dirty, Sync_WB, I) {
     guardOnlyInCache;
     zcllcguard;
 
-    relocateCacheBlockToVB;
+    relocateCacheBlockToWB;
     markCRE;
     deallocateCacheBlock;
 

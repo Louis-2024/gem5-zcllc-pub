@@ -49,19 +49,19 @@ structure (XYZCacheMemory, external = "yes") {
   bool vi_enabled();
   bool ziv_enabled();
   Addr simpleProbe(Addr);
-  void relocateVictimToVB(AbstractCacheEntry* entry, MachineID Sender, int MemAckOutstanding);
-  bool existVBEntryToWB();
-  int getVBEntryIndexToWB();
+  void relocateVictimToWB(AbstractCacheEntry* entry, MachineID Sender, int MemAckOutstanding);
+  bool existWBEntryToWriteback();
+  int getWBEntryIndexToWriteback();
   Addr getAddrByIndex(int index);
   DataBlock getDataBlkByIndex(int index);
   MachineID getSenderByIndex(int index);
   int getMemAckOutstandingByIndex(int index);
   void setMemAckOutstandingByIndex(int index, int value);
-  bool checkVBEntryByAddr(Addr addr);
+  bool checkWBEntryByAddr(Addr addr);
   int getIndexByAddr(Addr addr);
-  void removeVBEntryByAddr(Addr addr);
-  int getVBSize();
-  void setWBRequestSentByIndex(int index);
+  void removeWBEntryByAddr(Addr addr);
+  int getWBSize();
+  void setWritebackRequestSentByIndex(int index);
 
   // hardware transactional memory
   void htmCommitTransaction();

@@ -18,26 +18,26 @@
                   trigger(Event:MemData, in_msg.addr, e, tbe);
               } else if (in_msg.Type == MemoryRequestType:MEMORY_WB) {
                   DPRINTF(RubySlicc, "Receiving ACK from memQueue_in.MEMORY_WB: %#x \n", in_msg.addr);
-                  if (xyzCacheMemory.checkVBEntryByAddr(in_msg.addr)) {
+                  if (xyzCacheMemory.checkWBEntryByAddr(in_msg.addr)) {
                       int index := xyzCacheMemory.getIndexByAddr(in_msg.addr);
-                      DPRINTF(RubySlicc, "addr = %x, vbe = %p (Outstanding MemAck: %d)\n", in_msg.addr, xyzCacheMemory.getDataBlkByIndex(index), xyzCacheMemory.getMemAckOutstandingByIndex(index));
+                      DPRINTF(RubySlicc, "addr = %x, wbe = %p (Outstanding MemAck: %d)\n", in_msg.addr, xyzCacheMemory.getDataBlkByIndex(index), xyzCacheMemory.getMemAckOutstandingByIndex(index));
                   } else if(is_valid(wb_tbe)) {
                       DPRINTF(RubySlicc, "addr = %x, wb_tbe = %p (Outstanding MemAck: %d), %s\n", in_msg.addr, wb_tbe, wb_tbe.MemAckOutstanding, wb_tbe.TBEState);
                   } else if(is_valid(tbe)) {
                       DPRINTF(RubySlicc, "addr = %x, tbe = %p (Outstanding MemAck: %d)\n", in_msg.addr, tbe);
                   }
-                  if (xyzCacheMemory.checkVBEntryByAddr(in_msg.addr)) {
+                  if (xyzCacheMemory.checkWBEntryByAddr(in_msg.addr)) {
                       int index := xyzCacheMemory.getIndexByAddr(in_msg.addr);
                       assert(index >= 0);
                       int mem_ack_out := xyzCacheMemory.getMemAckOutstandingByIndex(index);
                       assert(mem_ack_out > 0);
                       if (mem_ack_out == 1) {
-                          xyzCacheMemory.removeVBEntryByAddr(in_msg.addr);
-                          DPRINTF(RubySlicc, "VB size = %d \n", xyzCacheMemory.getVBSize());
-                          trigger(Event:LastMemAck_VB, in_msg.addr, e, tbe);
+                          xyzCacheMemory.removeWBEntryByAddr(in_msg.addr);
+                          DPRINTF(RubySlicc, "WB size = %d \n", xyzCacheMemory.getWBSize());
+                          trigger(Event:LastMemAck_WB, in_msg.addr, e, tbe);
                       } else {
                           xyzCacheMemory.setMemAckOutstandingByIndex(index, mem_ack_out - 1);
-                          trigger(Event:MemAck_VB, in_msg.addr, e, tbe);
+                          trigger(Event:MemAck_WB, in_msg.addr, e, tbe);
                       }
                   } else if(is_valid(wb_tbe)) {
                       if(wb_tbe.MemAckOutstanding == 0) {
@@ -58,7 +58,7 @@
                           trigger(Event:MemAck, in_msg.addr, e, tbe);
                       }
                   } else {
-                      error("Invalid scenario: MemAck received for a line that is not in the cache or VB");
+                      error("Invalid scenario: MemAck received for a line that is not in the cache or WB");
                   }
               } else {
                   error("Invalid message");
@@ -145,22 +145,22 @@
   }
 
   in_port(request_in, RequestMsg, requestFromCache) {
-      if (xyzCacheMemory.existVBEntryToWB()) {
-          // WB from VB
-          int vb_index := xyzCacheMemory.getVBEntryIndexToWB();
-          assert(vb_index >= 0);
-          DPRINTF(RubySlicc, "Writing memory for %#x\n", xyzCacheMemory.getAddrByIndex(vb_index));
-          DPRINTF(RubySlicc, "Writing %s\n", xyzCacheMemory.getDataBlkByIndex(vb_index));
+      if (xyzCacheMemory.existWBEntryToWriteback()) {
+          // writeback from WB
+          int wb_index := xyzCacheMemory.getWBEntryIndexToWriteback();
+          assert(wb_index >= 0);
+          DPRINTF(RubySlicc, "Writing memory for %#x\n", xyzCacheMemory.getAddrByIndex(wb_index));
+          DPRINTF(RubySlicc, "Writing %s\n", xyzCacheMemory.getDataBlkByIndex(wb_index));
           enqueue(memQueue_out, MemoryMsg, toMemLatency) {
-              out_msg.addr := xyzCacheMemory.getAddrByIndex(vb_index);
+              out_msg.addr := xyzCacheMemory.getAddrByIndex(wb_index);
               out_msg.Type := MemoryRequestType:MEMORY_WB;
-              out_msg.Sender := xyzCacheMemory.getSenderByIndex(vb_index);
+              out_msg.Sender := xyzCacheMemory.getSenderByIndex(wb_index);
               out_msg.MessageSize := MessageSizeType:Writeback_Data;
-              out_msg.DataBlk := xyzCacheMemory.getDataBlkByIndex(vb_index);
+              out_msg.DataBlk := xyzCacheMemory.getDataBlkByIndex(wb_index);
               out_msg.Len := 0;
           }
-          xyzCacheMemory.setWBRequestSentByIndex(vb_index);
-          xyzCacheMemory.setMemAckOutstandingByIndex(vb_index, xyzCacheMemory.getMemAckOutstandingByIndex(vb_index) + 1);
+          xyzCacheMemory.setWritebackRequestSentByIndex(wb_index);
+          xyzCacheMemory.setMemAckOutstandingByIndex(wb_index, xyzCacheMemory.getMemAckOutstandingByIndex(wb_index) + 1);
       }
       if (request_in.isReady(clockEdge())) {
           peek(request_in, RequestMsg) {
@@ -216,10 +216,10 @@
                           } else if(is_valid(wb_tbe)) {
                             DPRINTF(RubySlicc, "GetS for %#x\n", in_msg.addr);
                             trigger(Event:GetS, in_msg.addr, e, wb_tbe);
-                          } else if (is_invalid(e) && xyzCacheMemory.checkVBEntryByAddr(in_msg.addr)) {
-                            // fetch from VB
-                            DPRINTF(RubySlicc, "GetS_VB for %#x\n", in_msg.addr);
-                            trigger(Event:GetS_VB, in_msg.addr, e, tbe);
+                          } else if (is_invalid(e) && xyzCacheMemory.checkWBEntryByAddr(in_msg.addr)) {
+                            // fetch from WB
+                            DPRINTF(RubySlicc, "GetS_WB for %#x\n", in_msg.addr);
+                            trigger(Event:GetS_WB, in_msg.addr, e, tbe);
                           } else {
                             DPRINTF(RubySlicc, "GetS for %#x\n", in_msg.addr);
                             trigger(Event:GetS, in_msg.addr, e, tbe);
@@ -231,10 +231,10 @@
                           } else if(is_valid(wb_tbe)) {
                             DPRINTF(RubySlicc, "GetM for %#x\n", in_msg.addr);
                             trigger(Event:GetM, in_msg.addr, e, wb_tbe);
-                          } else if (is_invalid(e) && xyzCacheMemory.checkVBEntryByAddr(in_msg.addr)) {
-                            // fetch from VB
-                            DPRINTF(RubySlicc, "GetM_VB for %#x\n", in_msg.addr);
-                            trigger(Event:GetM_VB, in_msg.addr, e, tbe);
+                          } else if (is_invalid(e) && xyzCacheMemory.checkWBEntryByAddr(in_msg.addr)) {
+                            // fetch from WB
+                            DPRINTF(RubySlicc, "GetM_WB for %#x\n", in_msg.addr);
+                            trigger(Event:GetM_WB, in_msg.addr, e, tbe);
                           } else {
                             DPRINTF(RubySlicc, "GetM for %#x\n", in_msg.addr);
                             trigger(Event:GetM, in_msg.addr, e, tbe);
@@ -250,8 +250,8 @@
                       DPRINTF(RubySlicc, "Writing-back LLC line %x from request_in.PutS: %x \n", victim_addr, in_msg.addr);
                       Entry victim_entry := getCacheEntry(victim_addr);
                       TBE victim_tbe := TBEs[victim_addr];
-                      DPRINTF(RubySlicc, "Sync_VB for %#x\n", victim_addr);
-                      trigger(Event:Sync_VB, victim_addr, victim_entry, victim_tbe);
+                      DPRINTF(RubySlicc, "Sync_WB for %#x\n", victim_addr);
+                      trigger(Event:Sync_WB, victim_addr, victim_entry, victim_tbe);
                   }
                   // second, handle incoming request
                   if(is_invalid(e)) { // invalid PutS entry
@@ -283,8 +283,8 @@
                       DPRINTF(RubySlicc, "Writing-back LLC line %x from request_in.PutM: %x \n", victim_addr, in_msg.addr);
                       Entry victim_entry := getCacheEntry(victim_addr);
                       TBE victim_tbe := TBEs[victim_addr];
-                      DPRINTF(RubySlicc, "Sync_VB for %#x\n", victim_addr);
-                      trigger(Event:Sync_VB, victim_addr, victim_entry, victim_tbe);
+                      DPRINTF(RubySlicc, "Sync_WB for %#x\n", victim_addr);
+                      trigger(Event:Sync_WB, victim_addr, victim_entry, victim_tbe);
                   }
                   // second, handle incoming request
                   DPRINTF(RubySlicc, "Handling request from request_in.PutM: %x \n", in_msg.addr);

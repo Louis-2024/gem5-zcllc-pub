@@ -26,7 +26,7 @@
 #include "params/XYZCache.hh"
 #include "sim/sim_object.hh"
 
-#define VB_SIZE 8 // should be larger than or equal to the number of cores
+#define WB_SIZE 8 // should be larger than or equal to the number of cores
 
 namespace gem5 {
 
@@ -37,15 +37,15 @@ class XYZCacheMemory : public CacheMemory {
         int row;
         int loc;
     };
-    struct VBEntry {
+    struct WBEntry {
         Addr addr;
         DataBlock DataBlk;
         MachineID Sender;
         int MemAckOutstanding;
-        int WBRequestSent;
-        VBEntry() : addr(0), DataBlk(), Sender(), MemAckOutstanding(0), WBRequestSent(0) {}
-        VBEntry(Addr addr, const DataBlock& DataBlk, MachineID Sender, int MemAckOutstanding): addr(addr), DataBlk(DataBlk), Sender(Sender), MemAckOutstanding(MemAckOutstanding), WBRequestSent(0) {}
-        ~VBEntry() {}
+        int WritebackRequestSent;
+        WBEntry() : addr(0), DataBlk(), Sender(), MemAckOutstanding(0), WritebackRequestSent(0) {}
+        WBEntry(Addr addr, const DataBlock& DataBlk, MachineID Sender, int MemAckOutstanding): addr(addr), DataBlk(DataBlk), Sender(Sender), MemAckOutstanding(MemAckOutstanding), WritebackRequestSent(0) {}
+        ~WBEntry() {}
     };
 public:
     typedef XYZCacheParams XYZParams;
@@ -228,7 +228,7 @@ public:
     }
     void reportInvariant(Addr address);
     void relocateVictim(AbstractCacheEntry* entry, Location targetLocation);
-    void relocateVictimToVB(AbstractCacheEntry* entry, MachineID Sender, int MemAckOutstanding);
+    void relocateVictimToWB(AbstractCacheEntry* entry, MachineID Sender, int MemAckOutstanding);
     AbstractCacheEntry* cacheProbeEntry(Addr address) const {
         // just return an entry instead of an address, used to find a victim to relocate
         assert(address == makeLineAddress(address));
@@ -292,20 +292,20 @@ public:
         return m_ziv;
     }
 
-    bool existVBEntryToWB() {
-        for (const auto& [addr, index] : m_VB_index) {
-            assert(m_cache_VB[index] != nullptr);
-            if (m_cache_VB[index]->WBRequestSent == 0) {
+    bool existWBEntryToWriteback() {
+        for (const auto& [addr, index] : m_WB_index) {
+            assert(m_cache_WB[index] != nullptr);
+            if (m_cache_WB[index]->WritebackRequestSent == 0) {
                 return true;
             }
         }
         return false;
     }
 
-    int getVBEntryIndexToWB() {
-        for (const auto& [addr, index] : m_VB_index) {
-            assert(m_cache_VB[index] != nullptr);
-            if (m_cache_VB[index]->WBRequestSent == 0) {
+    int getWBEntryIndexToWriteback() {
+        for (const auto& [addr, index] : m_WB_index) {
+            assert(m_cache_WB[index] != nullptr);
+            if (m_cache_WB[index]->WritebackRequestSent == 0) {
                 return index;
             }
         }
@@ -313,65 +313,65 @@ public:
     }
 
     Addr getAddrByIndex(int index) {
-        VBEntry* entry = m_cache_VB[index];
+        WBEntry* entry = m_cache_WB[index];
         assert(entry != nullptr);
         return (entry->addr);
     }
 
     DataBlock getDataBlkByIndex(int index) {
-        VBEntry* entry = m_cache_VB[index];
+        WBEntry* entry = m_cache_WB[index];
         assert(entry != nullptr);
         return (entry->DataBlk);
     }
 
     MachineID getSenderByIndex(int index) {
-        VBEntry* entry = m_cache_VB[index];
+        WBEntry* entry = m_cache_WB[index];
         assert(entry != nullptr);
         return (entry->Sender);
     }
 
     int getMemAckOutstandingByIndex(int index) {
-        VBEntry* entry = m_cache_VB[index];
+        WBEntry* entry = m_cache_WB[index];
         assert(entry != nullptr);
         return (entry->MemAckOutstanding);
     }
 
     void setMemAckOutstandingByIndex(int index, int value) {
-        VBEntry* entry = m_cache_VB[index];
+        WBEntry* entry = m_cache_WB[index];
         assert(entry != nullptr);
         entry->MemAckOutstanding = value;
     }
 
-    bool checkVBEntryByAddr(Addr addr) {
-        return (m_VB_index.find(addr) != m_VB_index.end());
+    bool checkWBEntryByAddr(Addr addr) {
+        return (m_WB_index.find(addr) != m_WB_index.end());
     }
 
     int getIndexByAddr(Addr addr) {
-        if (checkVBEntryByAddr(addr)) {
-            return m_VB_index[addr];
+        if (checkWBEntryByAddr(addr)) {
+            return m_WB_index[addr];
         } else {
             return -1;
         }
     }
 
-    void removeVBEntryByAddr(Addr addr) {
-        if (checkVBEntryByAddr(addr)) {
-            // remove from m_cache_VB
-            delete m_cache_VB[m_VB_index[addr]];
-            m_cache_VB[m_VB_index[addr]] = nullptr;
-            // remove from m_VB_index
-            m_VB_index.erase(addr);
+    void removeWBEntryByAddr(Addr addr) {
+        if (checkWBEntryByAddr(addr)) {
+            // remove from m_cache_WB
+            delete m_cache_WB[m_WB_index[addr]];
+            m_cache_WB[m_WB_index[addr]] = nullptr;
+            // remove from m_WB_index
+            m_WB_index.erase(addr);
         }
     }
 
-    int getVBSize() {
-        return m_VB_index.size();
+    int getWBSize() {
+        return m_WB_index.size();
     }
 
-    void setWBRequestSentByIndex(int index) {
-        VBEntry* entry = m_cache_VB[index];
+    void setWritebackRequestSentByIndex(int index) {
+        WBEntry* entry = m_cache_WB[index];
         assert(entry != nullptr);
-        entry->WBRequestSent = 1;
+        entry->WritebackRequestSent = 1;
     }
     
 protected:
@@ -383,9 +383,9 @@ protected:
     std::unordered_map<Addr, int> P; // the P set for maintaining P
     std::unordered_set<Addr> P_dirty;
     std::unordered_set<Addr> LLC_Only_dirty;
-    // Store the Q lines for WB in VB
-    std::unordered_map<Addr, int> m_VB_index;
-    std::vector<VBEntry*> m_cache_VB;
+    // Store the Q lines for writeback in WB
+    std::unordered_map<Addr, int> m_WB_index;
+    std::vector<WBEntry*> m_cache_WB;
 
     std::vector<int> CRECountPerSet; // The number of CRE per set, initialized to be all zeros
     std::vector<std::vector<bool>> isCRE;

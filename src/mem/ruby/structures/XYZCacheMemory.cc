@@ -40,15 +40,15 @@ void XYZCacheMemory::init() {
                     std::vector<bool>(m_cache_assoc, 1));
     CRETotal = getNumBlocks();
 
-    m_cache_VB.resize(VB_SIZE);
+    m_cache_WB.resize(WB_SIZE);
 }
 
 
 XYZCacheMemory::~XYZCacheMemory() {
-    for (int i = 0; i < VB_SIZE; i++) {
-        if (m_cache_VB[i] != nullptr) {
-            delete m_cache_VB[i];
-            m_cache_VB[i] = nullptr;
+    for (int i = 0; i < WB_SIZE; i++) {
+        if (m_cache_WB[i] != nullptr) {
+            delete m_cache_WB[i];
+            m_cache_WB[i] = nullptr;
         }
     }
 }
@@ -229,38 +229,38 @@ void XYZCacheMemory::relocateVictim(AbstractCacheEntry* entry, Location targetLo
     m_replacementPolicy_ptr->reset(entry->replacementData);
     */
 }
-void XYZCacheMemory::relocateVictimToVB(AbstractCacheEntry* entry, MachineID Sender, int MemAckOutstanding) {
+void XYZCacheMemory::relocateVictimToWB(AbstractCacheEntry* entry, MachineID Sender, int MemAckOutstanding) {
     auto orig_row = entry->getSet();
     auto orig_loc = entry->getWay();
-    assert(!isCRE[orig_row][orig_loc]); // only send non-CRE to VB for WB
-    DPRINTF(ZIVCache, "ZIV relocating %#x to VB \n", entry->m_Address);
+    assert(!isCRE[orig_row][orig_loc]); // only send non-CRE to WB for writeback
+    DPRINTF(ZIVCache, "ZIV relocating %#x to WB \n", entry->m_Address);
 
-    // find available VB slot
-    int vb_slot = -1;
-    for (int i = 0; i < VB_SIZE; i++) {
-        if (m_cache_VB[i] == nullptr) {
-            vb_slot = i;
+    // find available WB slot
+    int wb_slot = -1;
+    for (int i = 0; i < WB_SIZE; i++) {
+        if (m_cache_WB[i] == nullptr) {
+            wb_slot = i;
             break;
         }
     }
-    assert(vb_slot != -1);
+    assert(wb_slot != -1);
 
-    // insert entry to VB
+    // insert entry to WB
     Addr addr = entry->m_Address;
     DataBlock data = entry->getDataBlk();
-    VBEntry* vb_entry = new VBEntry(addr, data, Sender, MemAckOutstanding);
-    m_VB_index[addr] = vb_slot;
-    m_cache_VB[vb_slot] = vb_entry;
+    WBEntry* wb_entry = new WBEntry(addr, data, Sender, MemAckOutstanding);
+    m_WB_index[addr] = wb_slot;
+    m_cache_WB[wb_slot] = wb_entry;
 
-    // validate occupancy of VB
-    int m_cache_VB_occupancy = 0;
-    for (int i = 0; i < VB_SIZE; i++) {
-        if (m_cache_VB[i] != nullptr) {
-            m_cache_VB_occupancy++;
+    // validate occupancy of WB
+    int m_cache_WB_occupancy = 0;
+    for (int i = 0; i < WB_SIZE; i++) {
+        if (m_cache_WB[i] != nullptr) {
+            m_cache_WB_occupancy++;
         }
     }
-    assert(m_VB_index.size() <= VB_SIZE);
-    assert(m_VB_index.size() == m_cache_VB_occupancy);
+    assert(m_WB_index.size() <= WB_SIZE);
+    assert(m_WB_index.size() == m_cache_WB_occupancy);
 }
 
 
