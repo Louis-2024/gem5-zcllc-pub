@@ -43,7 +43,7 @@ class MyCacheSystem(RubySystem):
 
         super(MyCacheSystem, self).__init__()
 
-    def setup(self, system, cpus_or_testers, mem_ctrls, l1size, l1_assoc, l2size, l3size, l2_assoc, l3_assoc, use_ziv, use_vi, type_of_system, use_wc, enforce_roc, **kwargs):
+    def setup(self, system, cpus_or_testers, mem_ctrls, l1size, l1_assoc, l2size, l3size, l2_assoc, l3_assoc, number_of_cores, use_ziv, use_vi, type_of_system, use_wc, enforce_roc, **kwargs):
         """Set up the Ruby cache subsystem. Note: This can't be done in the
            constructor because many of these items require a pointer to the
            ruby system (self). This causes infinite recursion in initialize()
@@ -81,7 +81,7 @@ class MyCacheSystem(RubySystem):
         # assert self.block_size_bytes == 64, "Block size must be 64B, but got {}. ({})".format(self.block_size_bytes, self.block_size_bytes - 64)
         private_total = MemorySize(l2size) * num_agents / self.block_size_bytes
         self.xyzCacheMemory = XYZCache(size = l3size, assoc = l3_assoc, start_index_bit = self.getBlockSizeBits(system), 
-                                pri_tot = private_total, ziv=use_ziv, use_vi=use_vi)
+                                pri_tot = private_total, ziv=use_ziv, use_vi=use_vi, number_of_cores=number_of_cores)
         
         l1s = [L0Cache(system, self, cpus_or_testers[i] if type_of_system == "cpu" else self, l1_assoc, size=l1size, xyz_cache_memory = self.xyzCacheMemory) for i in range(num_agents)]
         self.controllers = \

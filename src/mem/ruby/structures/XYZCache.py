@@ -11,6 +11,7 @@ class XYZCache(RubyCache):
     use_vi = Param.Bool(True, "Whether enable vacancy invariant")
     ziv = Param.Bool(True, "Whether enable ZIV, when use_vi is enabled, ziv must also be true")
     pri_tot = Param.Int(-1, "Total private cache size")
+    number_of_cores = Param.Int(4, "Number of cores")
 
     # size = Param.MemorySize("capacity in bytes");
     # assoc = Param.Int("");

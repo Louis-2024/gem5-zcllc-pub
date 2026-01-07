@@ -30,8 +30,8 @@ namespace ruby {
 
 class XYZCacheMemory : public CacheMemory {
     struct Location {
-        int row;
-        int loc;
+        int row; // (row == -1) to represent VB
+        int loc; // if the target is in VB, use loc to represent 
     };
 public:
     typedef XYZCacheParams XYZParams;
