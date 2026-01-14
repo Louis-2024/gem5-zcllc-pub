@@ -278,7 +278,6 @@ machine(MachineType:L0Cache, "LC-MSI cache")
       out_msg.Destination.add(createMachineID(MachineType:L1Cache, version));
       out_msg.MessageSize := MessageSizeType:Control;
       out_msg.Requestor := machineID;
-      out_msg.is_reordered := false;
     }
   }
   action(sendGetM, "gM", desc="Send GetM to the directory") {
@@ -288,7 +287,6 @@ machine(MachineType:L0Cache, "LC-MSI cache")
         out_msg.Destination.add(createMachineID(MachineType:L1Cache, version));
         out_msg.MessageSize := MessageSizeType:Control;
         out_msg.Requestor := machineID;
-        out_msg.is_reordered := false;
     }
   }
 
@@ -300,7 +298,6 @@ machine(MachineType:L0Cache, "LC-MSI cache")
         out_msg.Destination.add(createMachineID(MachineType:L1Cache, version));
         out_msg.MessageSize := MessageSizeType:Control;
         out_msg.Requestor := machineID;
-        out_msg.is_reordered := false;
       }
   }
 
@@ -313,7 +310,6 @@ machine(MachineType:L0Cache, "LC-MSI cache")
           out_msg.DataBlk := cache_entry.DataBlk;
           out_msg.MessageSize := MessageSizeType:Data;
           out_msg.Requestor := machineID;
-          out_msg.is_reordered := false;
       }
   }
   action(sendWBData, "sWB", desc="Send putM+data to the directory") {
