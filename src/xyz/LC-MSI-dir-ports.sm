@@ -153,6 +153,7 @@
               if(is_valid(tbe) && is_valid(wb_tbe)) {
                 DPRINTF(RubySlicc, "An entry is in both TBE and WB_TBE\n");
               }
+              assert(e.Owner.count() <= 1);
               // if it is not the first request sending the request, throw it to ordering
               // FIXME: fix the ordering thing
               if( ((!in_msg.is_reordered && TBEs.cnt() == 0 && (bus.getROCCount(in_msg.SetIdx) > 0) && !isZCLLC()) || (TBEs.cnt() > 0 && !(is_valid(tbe) && tbe.addr == in_msg.addr && tbe.req == in_msg.Requestor))) && (in_msg.Type == CoherenceRequestType:GetS || in_msg.Type == CoherenceRequestType:GetM)) {
@@ -164,14 +165,6 @@
                   DPRINTF(RubySlicc, "is_invalid(e): %d\n", is_invalid(e));
                   DPRINTF(RubySlicc, "xyzCacheMemory.xyzCREAvail(in_msg.addr): %x %d\n", in_msg.addr, xyzCacheMemory.xyzCREAvail(in_msg.addr));
                   if(is_invalid(e) && xyzCacheMemory.xyzCREAvail(in_msg.addr) == false) {
-                      /*
-                      // Should not be the case when vi is employed
-                      Addr victim_addr := xyzCacheMemory.xyzCacheProbe(in_msg.addr);
-                      Entry victim_entry := getCacheEntry(victim_addr);
-                      TBE victim_tbe := TBEs[victim_addr];
-                      // if vi enabled, replacement should not happen
-                      assert(xyzCacheMemory.vi_enabled() == false);
-                      trigger(Event:Replacement, victim_addr, victim_entry, victim_tbe); */
                       Addr victim_addr := xyzCacheMemory.simpleProbe(in_msg.addr);
                       Entry victim_entry := getCacheEntry(victim_addr);
                       TBE victim_tbe := TBEs[victim_addr];
@@ -208,8 +201,7 @@
                       assert(xyzCacheMemory.ziv_enabled() == false);
                       DPRINTF(RubySlicc, "PutSNotLast for %#x\n", in_msg.addr);
                       trigger(Event:PutSNotLast, in_msg.addr, e, tbe); // just ack
-                  } if (e.Sharers.count() == 1 && e.Sharers.isElement(in_msg.Requestor)) {
-                      // assert(e.Sharers.isElement(in_msg.Requestor));
+                  } if ((e.Sharers.count() == 1 && e.Sharers.isElement(in_msg.Requestor)) || ((e.Sharers.count() == 0) && (e.Owner.count() == 1) && e.Owner.isElement(in_msg.Requestor))) {
                       if (xyzCacheMemory.checkDirty(in_msg.addr) == true) {
                           if((xyzCacheMemory.vi_enabled() == false || xyzCacheMemory.calculateVIwithDelta(0, 1, sum_prv_capacity))) {
                               DPRINTF(RubySlicc, "PutSLast_dirty for %#x\n", in_msg.addr);
@@ -243,7 +235,10 @@
                       }
                   }
               } else if (in_msg.Type == CoherenceRequestType:PutM) {
-                  if (is_valid(e) && e.Owner.isElement(in_msg.Requestor)) {
+                  assert(e.Owner.count() == 1);
+                  if (e.Sharers.count() > 0) {
+                      trigger(Event: PutMNotLast, in_msg.addr, e, tbe);
+                  }else if (is_valid(e) && e.Owner.isElement(in_msg.Requestor)) {
                       if((xyzCacheMemory.vi_enabled() == false || xyzCacheMemory.calculateVIwithDelta(0, 1, sum_prv_capacity))) {
                           DPRINTF(RubySlicc, "PutMOwner for %#x\n", in_msg.addr);
                           trigger(Event:PutMOwner, in_msg.addr, e, tbe);

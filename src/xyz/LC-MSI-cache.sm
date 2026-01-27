@@ -50,14 +50,38 @@ machine(MachineType:L1Cache, "LC-MSI cache")
                 desc="Privately cached";
     MP_D,      AccessPermission:Busy,
                 desc="Privately cached, Inv sent, waiting for data";
+
+    E,      AccessPermission:Read_Write,
+                desc="Exclusive. Read & write permissions. Only copy, clean.";
+    E_P,    AccessPermission:Busy,
+                desc="Exclusive, privately cached in L0";
+    EP_D,   AccessPermission:Busy,
+                desc="Exclusive, Inv sent to L0, waiting for data";
+
+    O,      AccessPermission:Read_Only,
+                desc="Owned. Has dirty copy, may be shared with others.";
+    O_P,    AccessPermission:Busy,
+                desc="Owned, privately cached in L0";
+    OP_D,   AccessPermission:Busy,
+                desc="Owned, Inv sent to L0, waiting for data";
+
     // States moving to Invalid
     MI_A,   AccessPermission:Read_Only,
                 desc="Was modified, moving to I, waiting for put ack";
     SI_A,   AccessPermission:Read_Only,
                 desc="Was shared, moving to I, waiting for put ack";
+    EI_A,   AccessPermission:Read_Only,
+                desc="Was exclusive, moving to I, waiting for put ack";
+    OI_A,   AccessPermission:Read_Only,
+                desc="Was owned, moving to I, waiting for put ack";
     II_A,   AccessPermission:Invalid,
                 desc="Sent valid data before receiving put ack. ";
                 // "Waiting for put ack.";
+
+    OM_AD,  AccessPermission:Busy,
+                desc="Owned, moving to M, waiting for acks and data";
+    OM_A,   AccessPermission:Read_Only,
+                desc="Owned, moving to M, waiting for acks";
   }
 
   enumeration(Event, desc="Cache events") {
@@ -798,11 +822,11 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     kd_wakeUpDependents;
   }
 
-  transition(IS_D, DataDirNoAcks, S) {
+  transition(IS_D, DataDirNoAcks, E) {
     toc;
     writeDataToCacheFromDir;
     deallocateTBE;
-    externalLoadHit;
+    externalLoadHitM;
     popDirResponseQueue;
     kd_wakeUpDependents;
   }
@@ -889,6 +913,72 @@ machine(MachineType:L1Cache, "LC-MSI cache")
       popForwardQueue;
   }
 
+  transition(E, Load, E_P) {
+      loadHitM;
+      popMandatoryQueue;
+  }
+
+  transition(E, Store, M_P) {
+      storeHit;
+      popMandatoryQueue;
+  }
+
+  transition(E, FwdGetS, S) {
+      sendCacheDataToReq;
+      popForwardQueue;
+  }
+
+  transition(E, FwdGetM, I) {
+      sendCacheDataToReq;
+      deallocateCacheBlock;
+      popForwardQueue;
+  }
+
+  transition(E, Replacement, EI_A) {
+      sendInvToL0;
+      tic;
+      sendPutS;
+      forwardEviction;
+  }
+
+  transition(E, Inv, I) {
+      sendInvToL0;
+      sendInvAcktoReq;
+      deallocateCacheBlock;
+      forwardEviction;
+      popForwardQueue;
+  }
+
+  transition(E_P, {FwdGetS, FwdGetM}, EP_D) {
+      forwardInvToL0;
+      stall_fwd;
+  }
+
+  transition(E_P, Replacement, EP_D) {
+      sendInvToL0;
+  }
+
+  transition(E_P, PutS, E) {
+      writebackPutDataToCache;
+      popMandatoryQueue;
+  }
+
+  transition(EP_D, PutS, E) {
+      writebackPutDataToCache;
+      popMandatoryQueue;
+      kd_wakeUpDependents;
+  }
+
+  transition({E_P, EP_D}, WB_Data, E) {
+      writebackRespDataToCache;
+      popL0ResponseQueue;
+      kd_wakeUpDependents;
+  }
+
+  transition(EP_D, {FwdGetS, FwdGetM}) {
+      stall_fwd;
+  }
+
   transition({SM_AD, SM_A}, {FwdGetS, FwdGetM}) {
     stall_fwd;
       // stall;
@@ -948,16 +1038,163 @@ transition({SM_AD, SM_A}, {Store, Replacement}) {
     sendInvToL0;
   }
 
-  // PMSI* fix
-  transition(M, {FwdGetM, FwdGetS}, I) {
-      // sendInvToL0;
-      sendCacheDataToReq;  // could send to directory, or the requestor
+  transition(M, FwdGetS, O) {
+      sendCacheDataToReq;
+      sendCacheDataToDir;
+      popForwardQueue;
+  }
+
+  transition(M, FwdGetM, I) {
+      sendCacheDataToReq;
       deallocateCacheBlock;
       popForwardQueue;
   }
 
-  transition({MI_A, SI_A, II_A, MP_D}, {Load, Store, Replacement}) {
+  transition(O, Load, O_P) {
+      loadHit;
+      popMandatoryQueue;
+  }
+
+  transition(O, Store, OM_AD) {
+      tic;
+      allocateTBE;
+      sendGetM;
+      popMandatoryQueue;
+  }
+
+  transition(O, FwdGetS) {
+      sendCacheDataToReq;
+      sendCacheDataToDir;
+      popForwardQueue;
+  }
+
+  transition(O, FwdGetM, I) {
+      sendCacheDataToReq;
+      deallocateCacheBlock;
+      popForwardQueue;
+  }
+
+  transition(O, Replacement, OI_A) {
+      sendInvToL0;
+      tic;
+      sendPutM;
+      forwardEviction;
+  }
+
+  transition(O_P, {FwdGetS, FwdGetM}, OP_D) {
+      forwardInvToL0;
+      stall_fwd;
+  }
+
+  transition(O_P, PutM, O) {
+      writebackPutDataToCache;
+      popMandatoryQueue;
+  }
+
+  transition(OP_D, PutM, O) {
+      writebackPutDataToCache;
+      popMandatoryQueue;
+      kd_wakeUpDependents;
+  }
+
+  transition({O_P, OP_D}, WB_Data, O) {
+      writebackRespDataToCache;
+      popL0ResponseQueue;
+      kd_wakeUpDependents;
+  }
+
+  transition(O_P, Load) {
+      loadHit;
+      popMandatoryQueue;
+  }
+
+  transition(O_P, {Store, Replacement}) {
       stall;
+  }
+
+  transition(OP_D, {FwdGetS, FwdGetM}) {
+      stall_fwd;
+  }
+
+  transition(OM_AD, DataDirNoAcks, M_P) {
+      toc;
+      deallocateTBE;
+      externalStoreHit;
+      popDirResponseQueue;
+      kd_wakeUpDependents;
+  }
+
+  transition(OM_AD, DataDirAcks, OM_A) {
+      storeAcks;
+      popDirResponseQueue;
+  }
+
+  transition({OM_AD, OM_A}, InvAck) {
+      decrAcks;
+      popResponseQueue;
+  }
+
+  transition(OM_A, LastInvAck, M_P) {
+      toc;
+      deallocateTBE;
+      externalStoreHit;
+      popResponseQueue;
+      kd_wakeUpDependents;
+  }
+
+  transition({OM_AD, OM_A}, Load) {
+      loadHit;
+      popMandatoryQueue;
+  }
+
+  transition({OM_AD, OM_A}, {Store, Replacement}) {
+      stall;
+  }
+
+  transition({OM_AD, OM_A}, {FwdGetS, FwdGetM}) {
+      stall_fwd;
+  }
+
+  transition({MI_A, SI_A, EI_A, OI_A, II_A, MP_D, EP_D, OP_D}, {Load, Store, Replacement}) {
+      stall;
+  }
+
+  transition(EI_A, PutAck, I) {
+      deallocateCacheBlock;
+      popForwardQueue;
+      kd_wakeUpDependents;
+  }
+
+  transition(EI_A, Inv, II_A) {
+      sendInvAcktoReq;
+      popForwardQueue;
+  }
+
+  transition(EI_A, FwdGetS, SI_A) {
+      sendCacheDataToReq;
+      popForwardQueue;
+  }
+
+  transition(EI_A, FwdGetM, II_A) {
+      sendCacheDataToReq;
+      popForwardQueue;
+  }
+
+  transition(OI_A, PutAck, I) {
+      deallocateCacheBlock;
+      popForwardQueue;
+      kd_wakeUpDependents;
+  }
+
+  transition(OI_A, FwdGetS) {
+      sendCacheDataToReq;
+      sendCacheDataToDir;
+      popForwardQueue;
+  }
+
+  transition(OI_A, FwdGetM, II_A) {
+      sendCacheDataToReq;
+      popForwardQueue;
   }
 
   transition(MI_A, FwdGetS, SI_A) {
@@ -1001,7 +1238,7 @@ transition({SM_AD, SM_A}, {Store, Replacement}) {
     kd_wakeUpDependents;
   }
 
-  transition({I,M,S,SI_A,II_A,SM_AD,IM_AD,IM_A,SM_A,MI_A}, Stall) {
+  transition({I,M,S,E,O,SI_A,EI_A,OI_A,II_A,SM_AD,IM_AD,IM_A,SM_A,MI_A,OM_AD,OM_A}, Stall) {
     stall;
   }
 }

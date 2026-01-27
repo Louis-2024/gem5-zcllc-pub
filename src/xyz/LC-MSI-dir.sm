@@ -10,7 +10,6 @@ machine(MachineType:Directory, "Directory protocol")
   Cycles toMemLatency := 1;
   // NOTE: this value propagates from the python configuration to here
   Cycles responseBusLatency := 1;
-  int sum_prv_cores := 0;
   int sum_prv_capacity := 0;
   bool enforce_roc := 1;
   int wb_buffer_size := 0;
@@ -42,23 +41,25 @@ MessageBuffer * responseFromBusOnly, network="From", virtual_network="6", vnet_t
 MessageBuffer *requestToMemory;
 MessageBuffer *responseFromMemory;
 {
-  state_declaration(State, desc="Directory states",
-                  default="Directory_State_I") {
-      // Stable states.
-      // NOTE: These are "cache-centric" states like in Sorin et al.
-      // However, The access permissions are memory-centric.
+  state_declaration(State, desc="Directory states", default="Directory_State_I") {
+
       I, AccessPermission:Read_Write,  desc="Invalid in the caches.";
       S, AccessPermission:Read_Only,   desc="At least one cache has the blk";
+      E, AccessPermission:Read_Only,   desc="A cache has the block in E";
+      O, AccessPermission:Invalid,     desc="A cache has the block in O";
       M, AccessPermission:Invalid,     desc="A cache has the block in M";
+
       LLC_Only_clean, AccessPermission:Read_Write, desc="In LLC only, clean";
       LLC_Only_dirty, AccessPermission:Read_Write, desc="In LLC only, dirty";
       LLC_Only_dirty_m, AccessPermission:Read_Only, desc="Waiting for memory ACK";
 
       // Transient states
       S_D, AccessPermission:Busy,      desc="Moving to S, but need data";
+      O_D, AccessPermission:Busy,      desc="Moving to O, but need data";
 
       // Waiting for data from memory
       S_m, AccessPermission:Busy, desc="In S waiting for mem";
+      E_m, AccessPermission:Busy, desc="In E waiting for mem";
       M_m, AccessPermission:Busy, desc="Moving to M waiting for mem";
 
       // Waiting for write-ack from memory
@@ -88,6 +89,7 @@ MessageBuffer *responseFromMemory;
 
         PutMOwner,    desc="Dirty data writeback from the owner";
         PutMOwnerWT,    desc="Dirty data writeback from the owner";
+        PutMNotLast,  desc="PutM and the block has other sharers";
         PutMNonOwner, desc="Dirty data writeback from non-owner";
 
         // Cache responses
@@ -195,9 +197,7 @@ MessageBuffer *responseFromMemory;
       }
   }
 
-  // modified such that WBTBE state is in sync with the main cache state
   void setState(TBE tbe, Entry cache_entry, Addr addr, State state) {
-    // assert(is_valid(cache_entry));
     if(is_valid(tbe)) {
         tbe.TBEState := state;
     }
@@ -206,16 +206,17 @@ MessageBuffer *responseFromMemory;
             DPRINTF(RubySlicc, "Owner %s\n", cache_entry.Owner);
             assert(cache_entry.Owner.count() == 1);
             assert(cache_entry.Sharers.count() == 0);
-        }
-        cache_entry.DirState := state;
-        if (state == State:I || state == State:LLC_Only_dirty || state == State:LLC_Only_clean)  {
+        } else if (state == State:E) {
+            assert(cache_entry.Owner.count() == 1);
+            assert(cache_entry.Sharers.count() == 0);
+        } else if (state == State:O) {
+            assert(cache_entry.Owner.count() == 1);
+            assert(cache_entry.Sharers.count() >= 1);
+        } else if (state == State:I || state == State:LLC_Only_dirty || state == State:LLC_Only_clean)  {
             assert(cache_entry.Owner.count() == 0);
             assert(cache_entry.Sharers.count() == 0);
         }
-    } else {
-        // should not change
-        // just forget
-        // assert(state == State:I);
+        cache_entry.DirState := state;
     }
   }
 
@@ -519,57 +520,52 @@ MessageBuffer *responseFromMemory;
     }
   action(addReqToSharers, "aS", desc="Add requestor to sharer list") {
       peek(request_in, RequestMsg) {
-          sum_prv_cores := sum_prv_cores + 1;
           cache_entry.Sharers.add(in_msg.Requestor);
       }
   }
 
-  action(xyzAddToSharers, 'xyzAS', desc="...") {
+  action(xyzAddSharer, 'xyzAS', desc="...") {
     xyzCacheMemory.addSharer(address);
   }
 
-  action(xyzRemoveFromSharers, 'xyzRM', desc="...") {
+  action(xyzRemoveSharer, 'xyzRM', desc="...") {
       peek(request_in, RequestMsg) {
           if(cache_entry.Owner.isElement(in_msg.Requestor) || cache_entry.Sharers.isElement(in_msg.Requestor)) {
             xyzCacheMemory.removeSharer(address);
           }
       }
   }
+
+  // XYZClearOwner
+
+  // XYZClearSharer
+
   action(xyzSetOwner, 'xyzSO', desc="...") {
     xyzCacheMemory.markOwner(address);
   }
 
   action(setOwner, "sO", desc="Set the owner") {
       peek(request_in, RequestMsg) {
-          sum_prv_cores := sum_prv_cores - cache_entry.Sharers.count() + 1;
           cache_entry.Owner.add(in_msg.Requestor);
       }
   }
 
   action(addOwnerToSharers, "oS", desc="Add the owner to sharers") {
-      // add owner to sharer only used on M->S, and we do not change the vi here
-      // error("Not supported");
       assert(cache_entry.Owner.count() == 1);
       cache_entry.Sharers.addNetDest(cache_entry.Owner);
-      sum_prv_cores := sum_prv_cores - 1 + cache_entry.Sharers.count();
   }
 
   action(removeReqFromSharers, "rS", desc="Remove requestor from sharers") {
       peek(request_in, RequestMsg) {
           cache_entry.Sharers.remove(in_msg.Requestor);
-          sum_prv_cores := sum_prv_cores - 1;
       }
   }
 
   action(clearSharers, "cS", desc="Clear the sharer list") {
-      sum_prv_cores := sum_prv_cores - cache_entry.Sharers.count();
-      // NOTE: this is not needed, because clearSharer will be called
-      // after setOwner(), which has already make the counting correct
       cache_entry.Sharers.clear();
   }
 
   action(clearOwner, "cO", desc="Clear the owner") {
-      sum_prv_cores := sum_prv_cores - 1;
       cache_entry.Owner.clear();
   }
 
@@ -899,8 +895,8 @@ MessageBuffer *responseFromMemory;
       markLLCDoneIfSplitBus;
       // stall;
   }
-  // try again...
-  transition({LLC_Only_dirty, LLC_Only_clean, I, S, M, S_m, LLC_Only_dirty_m, M_m, II_m, II_dm}, Order) {
+
+  transition({LLC_Only_dirty, LLC_Only_clean, I, S, E, O, M, S_m, E_m, O_D, LLC_Only_dirty_m, M_m, II_m, II_dm}, Order) {
       fwdToOrderFromReq;
       popRequestQueue;
       
@@ -938,10 +934,10 @@ MessageBuffer *responseFromMemory;
       delayPutSmarkLLCDone;
   }
   
-  transition({LLC_Only_clean, LLC_Only_dirty}, GetS, S) {
+  transition({LLC_Only_clean, LLC_Only_dirty}, GetS, E) {
     deallocateROCTBE;
-    addReqToSharers
-    xyzAddToSharers;
+    setOwner;
+    xyzSetOwner;
     sendLLCToReq;
     popRequestQueue;
 
@@ -960,13 +956,12 @@ MessageBuffer *responseFromMemory;
     markLLCDone_WaitForDataIfNonSplit;
   }
   
-  // allocateROCTBE only used when doing replacement and request has to be ordered
-  transition(I, GetS, S_m) {
+  transition(I, GetS, E_m) {
       deallocateROCTBE;
       allocateCacheBlock;
       sendMemRead;
-      addReqToSharers;
-      xyzAddToSharers;
+      setOwner;
+      xyzSetOwner;
       popRequestQueue;
 
       markLLCDoneIfSplitBus;
@@ -978,13 +973,35 @@ MessageBuffer *responseFromMemory;
       markLLCDone;
   }
 
-  transition(S_m, MemData, S) {
+  transition(E_m, MemData, E) {
       sendDataToReq;
       writeDataToCache;
       popMemQueue;
 
-      // markLLCDone;
       markLLCDoneIfNotSplitBusWithData;
+  }
+
+  transition(E, GetS, S) {
+      addReqToSharers;
+      addOwnerToSharers;
+      xyzAddSharer;
+      clearOwner;
+
+      sendLLCToReq;
+      popRequestQueue;
+
+      markLLCDone_WaitForDataIfNonSplit;
+  }
+
+  transition(E, GetM, M) {
+      clearOwner;
+      setOwner;
+      xyzSetOwner;
+
+      sendLLCToReq;
+      popRequestQueue;
+
+      markLLCDone_WaitForDataIfNonSplit;
   }
 
   transition(I, GetM, M_m) {
@@ -1011,7 +1028,7 @@ MessageBuffer *responseFromMemory;
       // deallocateROCTBE;
       sendLLCToReq;
       addReqToSharers;
-      xyzAddToSharers;
+      xyzAddSharer;
       popRequestQueue;
 
       markLLCDone_WaitForDataIfNonSplit;
@@ -1030,7 +1047,7 @@ MessageBuffer *responseFromMemory;
   }
 
     transition({LLC_Only_dirty, LLC_Only_dirty_m}, PutMNonOwner) {
-      xyzRemoveFromSharers;
+      xyzRemoveSharer;
       removeReqFromSharers;
       sendPutAck;
       popRequestQueue;
@@ -1038,7 +1055,7 @@ MessageBuffer *responseFromMemory;
     }
   
   transition({S, S_D, SS_m, S_m}, PutSNotLast) {
-      xyzRemoveFromSharers;
+      xyzRemoveSharer;
       removeReqFromSharers;
       sendPutAck;
       popRequestQueue;
@@ -1047,7 +1064,7 @@ MessageBuffer *responseFromMemory;
       markLLCDoneIfNonDelayAndNonSplit;
   }
   transition({S, S_D, SS_m, S_m}, PutMNonOwner) {
-      xyzRemoveFromSharers;
+      xyzRemoveSharer;
       removeReqFromSharers;
       sendPutAck;
       popRequestQueue;
@@ -1063,8 +1080,8 @@ MessageBuffer *responseFromMemory;
       markLLCDoneIfNonDelayAndNonSplit;
   }
   
-  transition(S, PutSLast_clean, LLC_Only_clean) {
-      xyzRemoveFromSharers;
+  transition({S, E}, PutSLast_clean, LLC_Only_clean) {
+      xyzRemoveSharer;
       removeReqFromSharers;
       sendPutAck;
       popRequestQueue;
@@ -1073,8 +1090,8 @@ MessageBuffer *responseFromMemory;
       markLLCDone;
   }
 
-  transition(S, PutSLast_dirty, LLC_Only_dirty) {
-      xyzRemoveFromSharers;
+  transition({S, E}, PutSLast_dirty, LLC_Only_dirty) {
+      xyzRemoveSharer;
       removeReqFromSharers;
       sendPutAck;
       popRequestQueue;
@@ -1082,7 +1099,7 @@ MessageBuffer *responseFromMemory;
       markLLCDone;
   }
 
-  transition(S, PutSLastWT_dirty, LLC_Only_dirty_m) {
+  transition({S, E}, PutSLastWT_dirty, LLC_Only_dirty_m) {
       // If we want to markCRE, we need to write it
 
       guardOnlyInCache;
@@ -1093,7 +1110,7 @@ MessageBuffer *responseFromMemory;
       migrateCacheToWBCBE; 
       
       sendLLCDataToMem;
-      xyzRemoveFromSharers;
+      xyzRemoveSharer;
       removeReqFromSharers;
       
       sendPutAck;
@@ -1128,33 +1145,44 @@ MessageBuffer *responseFromMemory;
     kd_wakeUpDependents;
 
   }
-  
-  // This transition is still needed, and should mark the slot end
-  // PMSI* fix
-  // transition(M, GetS, S_D) {
-  //     // notnow;
-  //     // not needed actually? may needed
-  //     // deallocateROCTBE;
-  //     sendFwdGetS;
-  //     addReqToSharers;
-  //     // not updating the vacancy invariant
-  //     addOwnerToSharers;
-  //     xyzAddToSharers
-  //     clearOwner;
-  //     popRequestQueue;
 
-  //     markLLCDoneIfSplitBus;
-  // }
+  transition(M, GetS, O_D) {
+      addReqToSharers;
+      xyzAddSharer;
 
-  // as if this is GetM according to PMSI*, so no S_D state needed
-  transition(M, GetS) {
-      sendFwdGetM;
+      sendFwdGetS;
+      popRequestQueue;
+
+      markLLCDoneIfSplitBus;
+  }
+
+  transition(O_D, Data, O) {
+      copyDataFromRespToEntry;
+      popDataResponseQueue;
+      markLLCDoneIfNotSplitBus;
+  }
+
+  transition(O, GetS, O_D) {
+      addReqToSharers;
+      xyzAddSharer;
+
+      sendFwdGetS;
+      popRequestQueue;
+
+      markLLCDoneIfSplitBus;
+  }
+
+  transition(O, GetM, M) {
+      sendInvToSharers;
+      clearSharers;
       clearOwner;
       setOwner;
       xyzSetOwner;
+
+      sendFwdGetM;
       popRequestQueue;
 
-      markLLCDone;
+      markLLCDone_WaitForDataIfNonSplit;
   }
 
   transition(M, GetM) {
@@ -1265,18 +1293,18 @@ MessageBuffer *responseFromMemory;
       markLLCDone;
   }
 
-  transition(M, PutMOwner, LLC_Only_dirty) {
+  transition({M, O}, PutMOwner, LLC_Only_dirty) {
       // mark clean and create CRE (or Not?), like another event PutMOwnerCreateCRE
       copyDataToEntry;
       // sendDataToMem;
-      xyzRemoveFromSharers;
+      xyzRemoveSharer;
       clearOwner;
       sendPutAck;
       popRequestQueue;
       markLLCDone;
   }
 
-  transition(M, PutMOwnerWT, LLC_Only_dirty_m) {
+  transition({M, O}, PutMOwnerWT, LLC_Only_dirty_m) {
       guardOnlyInCache;
 
       copyDataToEntry;
@@ -1287,7 +1315,7 @@ MessageBuffer *responseFromMemory;
 
       sendDataToMem;
 
-      xyzRemoveFromSharers;
+      xyzRemoveSharer;
       clearOwner;
       sendPutAck;
       popRequestQueue;
@@ -1359,7 +1387,7 @@ MessageBuffer *responseFromMemory;
   }
 
   transition(S_D, {PutSLast_dirty, PutSLast_clean}) {
-      xyzRemoveFromSharers;
+      xyzRemoveSharer;
       removeReqFromSharers;
       sendPutAck;
       popRequestQueue;
@@ -1437,7 +1465,7 @@ MessageBuffer *responseFromMemory;
     markLLCDone;
   }
 
-  transition(LLC_Only_dirty_m, GetS, S) {
+  transition(LLC_Only_dirty_m, GetS, E) {
     guardSplitBus;
     guardInWBTBE;
 
@@ -1445,11 +1473,11 @@ MessageBuffer *responseFromMemory;
     migrateWBTBEToCache;
 
     deallocateROCTBE;
-    addReqToSharers
-    xyzAddToSharers;
+    setOwner;
+    xyzSetOwner;
     sendLLCToReq;
     popRequestQueue;
-
+    
 
     deallocateWBTBE;
     
@@ -1480,9 +1508,9 @@ MessageBuffer *responseFromMemory;
     allocateCacheBlockIfNotPresent;
     migrateWBTBEToCache;
 
-      deallocateROCTBE;
+    deallocateROCTBE;
     addReqToSharers
-    xyzAddToSharers;
+    xyzAddSharer;
     sendLLCToReq;
     popRequestQueue;
 
@@ -1490,5 +1518,15 @@ MessageBuffer *responseFromMemory;
 
     markLLCDone;
   }
+
+  transition(O, PutMNotLast, S) {
+      clearOwner;
+
+      sendPutAck;
+      popRequestQueue;
+
+      markLLCDone;
+  }
+
 
 }
