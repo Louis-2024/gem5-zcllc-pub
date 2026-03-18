@@ -32,6 +32,11 @@ namespace gem5::ruby {
         gem5::statistics::Formula wt_putsRatio;
         gem5::statistics::Formula wt_putmRatio;
 
+        gem5::statistics::Scalar l0_hits;
+        gem5::statistics::Scalar l1_hits;
+        gem5::statistics::Scalar llc_hits;
+        gem5::statistics::Scalar mem_hits;
+
         Cycles w;
 
         uint64_t wcl_bound;
@@ -64,22 +69,19 @@ namespace gem5::ruby {
             total_repl++;
             total_repl_llc++;
         }
-        // void recordPutM(bool is_write_through) {
-        //     total_put++;
-        //     total_putm++;
-        //     if(is_write_through) {
-        //         total_putm_as_wt++;
-        //         total_put_as_wt++;
-        //     }
-        // };
-        // void recordPutS(bool is_write_through) {
-        //     total_put++;
-        //     total_puts++;
-        //     if(is_write_through) {
-        //         total_puts_as_wt++;
-        //         total_put_as_wt++;
-        //     }
-        // };
+        
+        void recordL0Hits() {
+            l0_hits++;
+        }
+        void recordL1Hits() {
+            l1_hits++;
+        }
+        void recordLLCHits() {
+            llc_hits++;
+        }
+        void recordMemHits() {
+            mem_hits++;
+        }
     };
 };
 

@@ -475,6 +475,7 @@ MessageBuffer *responseFromMemory;
 
                 DPRINTF(RubySlicc, "Out Msg: %s\n", out_msg);
             }
+            DPRINTF(FlexLLC, "[SendMemRead: Address = %#x, Sender = %s] \n", address, in_msg.Requestor);
         }
     }
 
@@ -490,6 +491,7 @@ MessageBuffer *responseFromMemory;
                 out_msg.DataBlk := in_msg.DataBlk;
                 out_msg.Len := 0;
             }
+            DPRINTF(FlexLLC, "[SendDataToMem: Address = %#x, Sender = %s] \n", address, in_msg.Requestor);
         }
     }
     action(sendLLCDataToMem, "wLLC", desc="Write data to memory") {
@@ -503,6 +505,7 @@ MessageBuffer *responseFromMemory;
                 out_msg.DataBlk := cache_entry.DataBlk;
                 out_msg.Len := 0;
             }
+            DPRINTF(FlexLLC, "[SendLLCDataToMem: Address = %#x, Sender = %s] \n", address, machineID);
     }
     // PMSI* fix only for write back from 
     action(sendRespDataToMem, "rw", desc="Write data to memory from resp") {
@@ -531,6 +534,7 @@ MessageBuffer *responseFromMemory;
                     out_msg.DataBlk := in_msg.DataBlk;
                     out_msg.Len := 0;
                 }
+                DPRINTF(FlexLLC, "[sendRespDataToMem: Address = %#x, Sender = %s] \n", address, in_msg.Sender);
             }
         }
     }
@@ -600,6 +604,7 @@ MessageBuffer *responseFromMemory;
               out_msg.Destination := cache_entry.Sharers;
               out_msg.MessageSize := MessageSizeType:Control;
           }
+          DPRINTF(FlexLLC, "[sendInvToSharers: Address = %#x, Requestor = %s, Destination = %s] \n", address, in_msg.Requestor, cache_entry.Sharers);
       }
   }
 
@@ -613,6 +618,7 @@ MessageBuffer *responseFromMemory;
               out_msg.Destination := cache_entry.Sharers;
               out_msg.MessageSize := MessageSizeType:Control;
           }
+          DPRINTF(FlexLLC, "[sendInvs: Address = %#x, Requestor = %s, Destination = %s] \n", address, machineID, cache_entry.Sharers);
       }
   }
 
@@ -626,6 +632,7 @@ MessageBuffer *responseFromMemory;
               out_msg.Destination := cache_entry.Owner;
               out_msg.MessageSize := MessageSizeType:Control;
           }
+          DPRINTF(FlexLLC, "[sendFwdGetS: Address = %#x, Requestor = %s, Destination = %s] \n", address, in_msg.Requestor, cache_entry.Owner);
       }
   }
 
@@ -639,6 +646,7 @@ MessageBuffer *responseFromMemory;
               out_msg.Destination := cache_entry.Owner;
               out_msg.MessageSize := MessageSizeType:Control;
           }
+          DPRINTF(FlexLLC, "[sendFwdGetM: Address = %#x, Requestor = %s, Destination = %s] \n", address, in_msg.Requestor, cache_entry.Owner);
       }
   }
 
@@ -654,6 +662,7 @@ MessageBuffer *responseFromMemory;
               out_msg.OriginalRequestor := in_msg.Requestor;
           }
       }
+      DPRINTF(FlexLLC, "[sendFwdGetMInv: Address = %#x, Requestor = %s, Destination = %s] \n", address, machineID, cache_entry.Owner);
   }
   action(sendDataToReq, "d", desc="Send data from memory to requestor. May need to send sharer number, too") {
       peek(memQueue_in, MemoryMsg) {
@@ -694,6 +703,7 @@ MessageBuffer *responseFromMemory;
                 }
                 assert(out_msg.Acks >= 0);
             }
+            DPRINTF(FlexLLC, "[SendMemDataToReq: Address = %#x, OriginalRequestor = %s, Sender = %s, Destination = %s] \n", address, in_msg.OriginalRequestorMachId, machineID, in_msg.OriginalRequestorMachId);
           }
       }
   }
@@ -707,6 +717,7 @@ MessageBuffer *responseFromMemory;
               out_msg.Destination.add(in_msg.Requestor);
               out_msg.MessageSize := MessageSizeType:Control;
           }
+          DPRINTF(FlexLLC, "[sendPutAck: Address = %#x, Requestor = %s, Destination = %s] \n", address, machineID, in_msg.Requestor);
       }
   }
   action(popResponseQueue, "pR", desc="Pop the response queue") {

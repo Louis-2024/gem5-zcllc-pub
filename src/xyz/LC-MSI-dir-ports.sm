@@ -17,6 +17,7 @@
               TBE wb_tbe := WB_TBEs[in_msg.addr];
 
               if (in_msg.Type == MemoryRequestType:MEMORY_READ) {
+                DPRINTF(FlexLLC, "MemData: Address = %#x, Current State = %s, Sender = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Sender);
                   trigger(Event:MemData, in_msg.addr, e, tbe);
               } else if (in_msg.Type == MemoryRequestType:MEMORY_WB) {
                   // these scenarios should not happen
@@ -30,8 +31,10 @@
                       error("Outstanding request hits 0 before receiving MemAck");
                   }
                   if(wb_tbe.MemAckOutstanding == 1) {
+                    DPRINTF(FlexLLC, "LastMemAck: Address = %#x, Current State = %s, Sender = %s \n", in_msg.addr, getState(wb_tbe, e, in_msg.addr), in_msg.Sender);
                       trigger(Event:LastMemAck, in_msg.addr, e, wb_tbe);
                   } else {
+                    DPRINTF(FlexLLC, "MemAck: Address = %#x, Current State = %s, Sender = %s \n", in_msg.addr, getState(wb_tbe, e, in_msg.addr), in_msg.Sender);
                       trigger(Event:MemAck, in_msg.addr, e, wb_tbe);
                   }
                 } else if(is_valid(e)) {
@@ -39,8 +42,10 @@
                       error("Outstanding request hits 0 before receiving MemAck");
                   }
                   if(e.MemAckOutstanding == 1) {
+                    DPRINTF(FlexLLC, "LastMemAck: Address = %#x, Current State = %s, Sender = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Sender);
                       trigger(Event:LastMemAck, in_msg.addr, e, tbe);
                   } else {
+                    DPRINTF(FlexLLC, "MemAck: Address = %#x, Current State = %s, Sender = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Sender);
                       trigger(Event:MemAck, in_msg.addr, e, tbe);
                   }
                 } else {
@@ -71,14 +76,18 @@
                 }
                 if (in_msg.Type == CoherenceResponseType:Data) {
                     if(is_valid(wb_tbe)) {
+                        DPRINTF(FlexLLC, "Data: Address = %#x, Current State = %s, Sender = %s \n", in_msg.addr, getState(wb_tbe, e, in_msg.addr), in_msg.Sender);
                         trigger(Event:Data, in_msg.addr, e, wb_tbe);
                     } else {
+                        DPRINTF(FlexLLC, "Data: Address = %#x, Current State = %s, Sender = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Sender);
                         trigger(Event:Data, in_msg.addr, e, tbe);
                     }
                 } else if(in_msg.Type == CoherenceResponseType:InvAck) {
                     if(is_valid(wb_tbe)) {
+                        DPRINTF(FlexLLC, "InvAck: Address = %#x, Current State = %s, Sender = %s \n", in_msg.addr, getState(wb_tbe, e, in_msg.addr), in_msg.Sender);
                         trigger(Event:InvAck, in_msg.addr, e, wb_tbe);
                     } else {
+                        DPRINTF(FlexLLC, "InvAck: Address = %#x, Current State = %s, Sender = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Sender);
                         trigger(Event:InvAck, in_msg.addr, e, tbe);
                     }
                 } else {
@@ -105,14 +114,18 @@
                 }
                 if (in_msg.Type == CoherenceResponseType:Data) {
                     if(is_valid(wb_tbe)) {
+                        DPRINTF(FlexLLC, "Data: Address = %#x, Current State = %s, Sender = %s \n", in_msg.addr, getState(wb_tbe, e, in_msg.addr), in_msg.Sender);
                         trigger(Event:Data, in_msg.addr, e, wb_tbe);
                     } else {
+                        DPRINTF(FlexLLC, "Data: Address = %#x, Current State = %s, Sender = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Sender);
                         trigger(Event:Data, in_msg.addr, e, tbe);
                     }
                 } else if(in_msg.Type == CoherenceResponseType:InvAck) {
                     if(is_valid(wb_tbe)) {
+                        DPRINTF(FlexLLC, "InvAck: Address = %#x, Current State = %s, Sender = %s \n", in_msg.addr, getState(wb_tbe, e, in_msg.addr), in_msg.Sender);
                         trigger(Event:InvAck, in_msg.addr, e, wb_tbe);
                     } else {
+                        DPRINTF(FlexLLC, "InvAck: Address = %#x, Current State = %s, Sender = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Sender);
                         trigger(Event:InvAck, in_msg.addr, e, tbe);
                     }
                 } else {
@@ -182,20 +195,40 @@
                       DPRINTF(RubySlicc, "GetS for %#x\n", in_msg.addr);
                       if (in_msg.Type == CoherenceRequestType:GetS) {
                           if(is_valid(tbe)) {
+                            xyzStatsObject.recordLLCHits();
+                            DPRINTF(FlexLLC, "GetS: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                             trigger(Event:GetS, in_msg.addr, e, tbe);
                           } else if(is_valid(wb_tbe)) {
+                            xyzStatsObject.recordLLCHits();
+                            DPRINTF(FlexLLC, "GetS: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(wb_tbe, e, in_msg.addr), in_msg.Requestor);
                             trigger(Event:GetS, in_msg.addr, e, wb_tbe);
                           } else {
                             // could be missing both
+                            if (xyzCacheMemory.isTagPresent(in_msg.addr)) {
+                                xyzStatsObject.recordLLCHits();
+                            } else {
+                                xyzStatsObject.recordMemHits();
+                            }
+                            DPRINTF(FlexLLC, "GetS: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                             trigger(Event:GetS, in_msg.addr, e, tbe);
                           }
                       } else if (in_msg.Type == CoherenceRequestType:GetM) {
                           DPRINTF(RubySlicc, "GetM for %#x\n", in_msg.addr);
                           if(is_valid(tbe)) {
+                            xyzStatsObject.recordLLCHits();
+                            DPRINTF(FlexLLC, "GetM: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                             trigger(Event:GetM, in_msg.addr, e, tbe);
                           } else if(is_valid(wb_tbe)) {
+                            xyzStatsObject.recordLLCHits();
+                            DPRINTF(FlexLLC, "GetM: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(wb_tbe, e, in_msg.addr), in_msg.Requestor);
                             trigger(Event:GetM, in_msg.addr, e, wb_tbe);
                           } else {
+                            if (xyzCacheMemory.isTagPresent(in_msg.addr)) {
+                                xyzStatsObject.recordLLCHits();
+                            } else {
+                                xyzStatsObject.recordMemHits();
+                            }
+                            DPRINTF(FlexLLC, "GetM: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                             trigger(Event:GetM, in_msg.addr, e, tbe);
                           }
                       } else {
@@ -207,19 +240,23 @@
                   if(is_invalid(e)) {
                       assert(xyzCacheMemory.ziv_enabled() == false);
                       DPRINTF(RubySlicc, "PutSNotLast for %#x\n", in_msg.addr);
+                      DPRINTF(FlexLLC, "PutSNotLast: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                       trigger(Event:PutSNotLast, in_msg.addr, e, tbe); // just ack
                   } if (e.Sharers.count() == 1 && e.Sharers.isElement(in_msg.Requestor)) {
                       // assert(e.Sharers.isElement(in_msg.Requestor));
                       if (xyzCacheMemory.checkDirty(in_msg.addr) == true) {
                           if((xyzCacheMemory.vi_enabled() == false || xyzCacheMemory.calculateVIwithDelta(0, 1, sum_prv_capacity))) {
                               DPRINTF(RubySlicc, "PutSLast_dirty for %#x\n", in_msg.addr);
+                              DPRINTF(FlexLLC, "PutSLast_dirty: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                               trigger(Event:PutSLast_dirty, in_msg.addr, e, tbe);
                           } else {
                               DPRINTF(RubySlicc, "PutSLastWT_dirty for %#x\n", in_msg.addr);
+                              DPRINTF(FlexLLC, "PutSLastWT_dirty: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                               trigger(Event:PutSLastWT_dirty, in_msg.addr, e, tbe);
                           }
                       } else {
                           DPRINTF(RubySlicc, "PutSLast_clean for %#x\n", in_msg.addr);
+                          DPRINTF(FlexLLC, "PutSLast_clean: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                           trigger(Event:PutSLast_clean, in_msg.addr, e, tbe);
                       }
                   } else {
@@ -231,13 +268,16 @@
                           Entry victim_entry := getCacheEntry(victim_addr);
                           TBE victim_tbe := TBEs[victim_addr];
                           DPRINTF(RubySlicc, "Sync for %#x\n", victim_addr);
+                          DPRINTF(FlexLLC, "Sync: Address = %#x, Current State = %s, Requestor = %s \n", victim_addr, getState(victim_tbe, victim_entry, victim_addr), in_msg.Requestor);
                           trigger(Event:Sync, victim_addr, victim_entry, victim_tbe);
                       } else {
                         if(e.Sharers.isElement(in_msg.Requestor)) {
                             DPRINTF(RubySlicc, "PutSNotLast for %#x\n", in_msg.addr);
+                            DPRINTF(FlexLLC, "PutSNotLast: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                             trigger(Event:PutSNotLast, in_msg.addr, e, tbe);
                         } else {
                             DPRINTF(RubySlicc, "PutSNotLastNonSharer for %#x\n", in_msg.addr);
+                            DPRINTF(FlexLLC, "PutSNotLastNonSharer: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                             trigger(Event:PutSNotLastNonSharer, in_msg.addr, e, tbe);
                         }
                       }
@@ -246,9 +286,11 @@
                   if (is_valid(e) && e.Owner.isElement(in_msg.Requestor)) {
                       if((xyzCacheMemory.vi_enabled() == false || xyzCacheMemory.calculateVIwithDelta(0, 1, sum_prv_capacity))) {
                           DPRINTF(RubySlicc, "PutMOwner for %#x\n", in_msg.addr);
+                          DPRINTF(FlexLLC, "PutMOwner: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                           trigger(Event:PutMOwner, in_msg.addr, e, tbe);
                       } else {
                           DPRINTF(RubySlicc, "PutMOwnerWT for %#x\n", in_msg.addr);
+                          DPRINTF(FlexLLC, "PutMOwnerWT: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                           trigger(Event:PutMOwnerWT, in_msg.addr, e, tbe);
                       }
                   } else {
@@ -256,6 +298,7 @@
                           assert(xyzCacheMemory.ziv_enabled() == false);
                       }
                       DPRINTF(RubySlicc, "PutMNonOwner for %#x\n", in_msg.addr);
+                      DPRINTF(FlexLLC, "PutMNonOwner: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                       trigger(Event:PutMNonOwner, in_msg.addr, e, tbe);
                   }
               } else {

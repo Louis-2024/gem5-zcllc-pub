@@ -269,6 +269,11 @@ machine(MachineType:L0Cache, "LC-MSI cache")
     }
   }
 
+  action(printInstructionAddr, desc="") {
+    DPRINTF(FlexLLC_Instruction, "%#x \n", address);
+  }
+
+
   action(sendGetS, 'gS', desc="Send GetS to the directory") {
     enqueue(request_out, RequestMsg, 1) {
       // address, cache_entry, tbe
@@ -352,6 +357,7 @@ machine(MachineType:L0Cache, "LC-MSI cache")
   }
 
   action(loadHit, "Lh", desc="Load hit") {
+    xyzStatsObject.recordL0Hits();
     assert(is_valid(cache_entry));
     if (DCache.isTagPresent(address)) {
         DCache.setMRU(cache_entry);
@@ -380,6 +386,7 @@ machine(MachineType:L0Cache, "LC-MSI cache")
     }
   }
   action(storeHit, "Sh", desc="Store hit") {
+    xyzStatsObject.recordL0Hits();
     assert(is_valid(cache_entry));
     DCache.setMRU(cache_entry);
     // The same as the read callback above.
@@ -499,6 +506,7 @@ machine(MachineType:L0Cache, "LC-MSI cache")
   }
   transition(I, Ifetch, IS_D) {
     tic;
+    printInstructionAddr;
     allocateICacheBlock;
     allocateTBE;
     sendGetS;
@@ -549,7 +557,13 @@ machine(MachineType:L0Cache, "LC-MSI cache")
     kd_wakeUpDependents;
   }
 
-  transition({S, M}, {Load, Ifetch}) {
+  transition({S, M}, Load) {
+      loadHit;
+      popMandatoryQueue;
+  }
+
+  transition({S, M}, Ifetch) {
+      printInstructionAddr;
       loadHit;
       popMandatoryQueue;
   }

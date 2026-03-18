@@ -7,7 +7,9 @@
 #include <map>
 #include <vector>
 #include "debug/ZIVCache.hh"
-
+#include "debug/FlexLLC.hh"
+#include "debug/FlexLLC_Instruction.hh"
+#include "debug/FlexLLC_Data.hh"
 #include "base/statistics.hh"
 #include "mem/cache/replacement_policies/base.hh"
 #include "mem/cache/replacement_policies/replaceable_entry.hh"

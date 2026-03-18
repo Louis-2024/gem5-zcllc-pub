@@ -33,6 +33,11 @@ void XYZStatsObject::regStats() {
     wt_putRatio = total_put_as_wt / total_put;
     wt_putsRatio = total_puts_as_wt / total_puts;
     wt_putmRatio = total_putm_as_wt / total_putm;
+
+    l0_hits.name(name() + ".FlexLLC_L0_Hits").desc("");
+    l1_hits.name(name() + ".FlexLLC_L1_Hits").desc("");
+    llc_hits.name(name() + ".FlexLLC_LLC_Hits").desc("");
+    mem_hits.name(name() + ".FlexLLC_Cache_Misses").desc("");
 }
 
 } // namespace gem5

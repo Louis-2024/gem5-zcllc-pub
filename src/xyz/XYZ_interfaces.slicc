@@ -16,6 +16,11 @@ structure (XYZStatsObject, external = "yes") {
     void recordReplLLC();
     void tic(Addr);
     void toc(Addr);
+
+    void recordL0Hits();
+    void recordL1Hits();
+    void recordLLCHits();
+    void recordMemHits();
 }
 
 structure (XYZCacheMemory, external = "yes") {

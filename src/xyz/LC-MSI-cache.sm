@@ -499,6 +499,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     assert(tbe.AcksOutstanding > 0);
   }
   action(loadHit, "Lh", desc="Load hit") {
+    xyzStatsObject.recordL1Hits();
     assert(is_valid(cache_entry));
     cacheMemory.setMRU(cache_entry);
     enqueue(responseToL0_out, ResponseMsg, 1) {
@@ -510,6 +511,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     }
   }
   action(loadHitM, "Lhm", desc="Load hit") {
+    xyzStatsObject.recordL1Hits();
     assert(is_valid(cache_entry));
     cacheMemory.setMRU(cache_entry);
     enqueue(responseToL0_out, ResponseMsg, 1) {
@@ -573,6 +575,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     // }
   }
   action(storeHit, "Sh", desc="Store hit") {
+    xyzStatsObject.recordL1Hits();
     assert(is_valid(cache_entry));
     cacheMemory.setMRU(cache_entry);
     // The same as the read callback above.
@@ -730,10 +733,12 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     peek(requestFromL0_in, RequestMsg) {
         Addr a := in_msg.addr;
         stall_and_wait(requestFromL0_in, a);
+        DPRINTF(FlexLLC, "! %s stall: Stalled address = %#x \n", machineID, in_msg.addr);
     }
   }
   action(stall_fwd, "zfwd", desc="Stall forward") {
     stall_and_wait(forward_in, address);
+    DPRINTF(FlexLLC, "! %s stall_fwd: Stalled address = %#x \n", machineID, address);
   }
 
   action(kd_wakeUpDependents, "kd", desc="Wake-up dependents") {
